@@ -1,0 +1,44 @@
+RFID Attendance System - Wiring Diagram
+========================================
+
+Arduino UNO R4 WiFi Pinout
+--------------------------
+
+RC522 RFID Reader Module:
+  SDA (SS)  → Arduino Pin 10
+  SCK       → Arduino Pin 13
+  MOSI      → Arduino Pin 11
+  MISO      → Arduino Pin 12
+  RST       → Arduino Pin 9
+  3.3V      → Arduino 3.3V
+  GND       → Arduino GND
+
+LCD 16x2 with I2C Adapter:
+  SDA       → Arduino Pin A4 (SDA)
+  SCL       → Arduino Pin A5 (SCL)
+  VCC       → Arduino 5V
+  GND       → Arduino GND
+
+Green LED:
+  Anode (+) → Arduino Pin 5 (with 220Ω resistor)
+  Cathode (-) → Arduino GND
+
+Red LED:
+  Anode (+) → Arduino Pin 6 (with 220Ω resistor)
+  Cathode (-) → Arduino GND
+
+Buzzer:
+  Positive  → Arduino Pin 7 (with 220Ω resistor)
+  Negative  → Arduino GND
+
+Power Supply:
+  Arduino USB → Computer USB port (5V)
+  External power → Arduino DC jack (7-12V) if needed
+
+Notes:
+------
+- Use 220Ω resistors for LEDs to limit current
+- Ensure proper grounding of all components
+- Use stable power supply for reliable operation
+- Keep wires short to reduce interference
+- Test each component individually before full assembly

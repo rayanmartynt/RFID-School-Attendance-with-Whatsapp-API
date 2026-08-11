@@ -1,0 +1,205 @@
+import { useState, useEffect } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { ArrowLeft } from 'lucide-react'
+import api from '../services/api'
+
+const DeviceForm = () => {
+  const navigate = useNavigate()
+  const { id } = useParams()
+  const isEdit = !!id
+
+  const [formData, setFormData] = useState({
+    device_id: '',
+    device_name: '',
+    location: '',
+    device_type: 'ENTRANCE_READER',
+    api_key: ''
+  })
+
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (isEdit) {
+      fetchDevice()
+    }
+  }, [id])
+
+  const fetchDevice = async () => {
+    try {
+      const response = await api.get(`/devices/${id}`)
+      setFormData(response.data)
+    } catch (error) {
+      console.error('Error fetching device:', error)
+    }
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+
+    try {
+      if (isEdit) {
+        await api.put(`/devices/${id}`, formData)
+      } else {
+        await api.post('/devices', formData)
+      }
+      navigate('/devices')
+    } catch (error) {
+      setError(error.response?.data?.error || 'Failed to save device')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    })
+  }
+
+  const generateApiKey = () => {
+    const apiKey = `device_${Math.random().toString(36).substr(2, 16)}`
+    setFormData({ ...formData, api_key: apiKey })
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-4">
+        <button
+          onClick={() => navigate('/devices')}
+          className="text-gray-600 hover:text-gray-800"
+        >
+          <ArrowLeft size={24} />
+        </button>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">
+            {isEdit ? 'Edit Device' : 'Add New Device'}
+          </h1>
+          <p className="text-gray-500">
+            {isEdit ? 'Update device information' : 'Register a new RFID reader device'}
+          </p>
+        </div>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg">
+          {error}
+        </div>
+      )}
+
+      <div className="card">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Device ID *
+              </label>
+              <input
+                type="text"
+                name="device_id"
+                value={formData.device_id}
+                onChange={handleChange}
+                className="input-field"
+                placeholder="e.g., GATE-001"
+                required
+                disabled={isEdit}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Device Name *
+              </label>
+              <input
+                type="text"
+                name="device_name"
+                value={formData.device_name}
+                onChange={handleChange}
+                className="input-field"
+                placeholder="e.g., Main Entrance Reader"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Location *
+              </label>
+              <input
+                type="text"
+                name="location"
+                value={formData.location}
+                onChange={handleChange}
+                className="input-field"
+                placeholder="e.g., Main Gate"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Device Type *
+              </label>
+              <select
+                name="device_type"
+                value={formData.device_type}
+                onChange={handleChange}
+                className="input-field"
+                required
+              >
+                <option value="ENTRANCE_READER">Entrance Reader</option>
+                <option value="EXIT_READER">Exit Reader</option>
+              </select>
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                API Key *
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  name="api_key"
+                  value={formData.api_key}
+                  onChange={handleChange}
+                  className="input-field flex-1"
+                  placeholder="Device API key for authentication"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={generateApiKey}
+                  className="btn-secondary"
+                >
+                  Generate
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn-primary disabled:opacity-50"
+            >
+              {loading ? 'Saving...' : isEdit ? 'Update Device' : 'Add Device'}
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/devices')}
+              className="btn-secondary"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+export default DeviceForm
