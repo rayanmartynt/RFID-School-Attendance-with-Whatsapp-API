@@ -74,7 +74,7 @@ RFID-School-Attendance-with-Whatsapp-API/
 
 1. **Clone the repository**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/rayanmartynt/RFID-School-Attendance-with-Whatsapp-API.git
    cd RFID-School-Attendance-with-Whatsapp-API
    ```
 
@@ -104,20 +104,6 @@ RFID-School-Attendance-with-Whatsapp-API/
    - Upload to your ESP8266/ESP32 board
 
 ### Environment Variables
-
-**Backend (.env)**
-```
-DATABASE_URL=postgresql://...
-JWT_SECRET=your-secret-key
-JWT_EXPIRES_IN=24h
-PORT=5000
-FRONTEND_URL=http://localhost:3000
-WHATSAPP_PHONE_NUMBER_ID=your-phone-id
-WHATSAPP_ACCESS_TOKEN=your-access-token
-SCHOOL_NAME=Your School Name
-SCHOOL_TIME_START=07:50
-SCHOOL_TIME_END=12:50
-```
 
 **Frontend (.env)**
 ```
