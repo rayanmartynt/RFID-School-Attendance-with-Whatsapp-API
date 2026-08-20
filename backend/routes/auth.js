@@ -1,10 +1,66 @@
-const express = require('express');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const { query } = require('../config/database');
-const { logger } = require('../utils/logger');
+import express from 'express';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import { db } from '../db/index.js';
+import { users } from '../db/schema.js';
+import { eq } from 'drizzle-orm';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
+
+// Create default admin user (for initial setup)
+router.post('/setup', async (req, res) => {
+  try {
+    const { username, password, email, firstName, lastName } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required' });
+    }
+
+    // Check if user already exists
+    const existingUser = await db
+      .select()
+      .from(users)
+      .where(eq(users.username, username))
+      .limit(1);
+
+    if (existingUser.length > 0) {
+      return res.status(400).json({ error: 'User already exists' });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create user
+    const result = await db
+      .insert(users)
+      .values({
+        username,
+        password: hashedPassword,
+        email: email || null,
+        firstName: firstName || 'Admin',
+        lastName: lastName || 'User',
+        role: 'ADMIN',
+        isActive: true
+      })
+      .returning();
+
+    logger.info('Default admin user created', { userId: result[0].id, username });
+
+    res.status(201).json({
+      message: 'Admin user created successfully',
+      user: {
+        id: result[0].id,
+        username: result[0].username,
+        email: result[0].email,
+        role: result[0].role
+      }
+    });
+  } catch (error) {
+    logger.error('Error creating admin user', { error: error.message });
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // Login
 router.post('/login', async (req, res) => {
@@ -16,28 +72,26 @@ router.post('/login', async (req, res) => {
     }
 
     // Get user from database
-    const result = await query(
-      'SELECT * FROM users WHERE username = $1 AND is_active = TRUE',
-      [username]
-    );
+    const userResult = await db
+      .select()
+      .from(users)
+      .where(eq(users.username, username));
 
-    if (result.rows.length === 0) {
+    if (userResult.length === 0) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const user = result.rows[0];
+    const user = userResult[0];
+
+    if (!user.isActive) {
+      return res.status(401).json({ error: 'Account is inactive' });
+    }
 
     // Verify password
-    const validPassword = await bcrypt.compare(password, user.password_hash);
+    const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-
-    // Update last login
-    await query(
-      'UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1',
-      [user.id]
-    );
 
     // Generate JWT token
     const token = jwt.sign(
@@ -58,8 +112,6 @@ router.post('/login', async (req, res) => {
         id: user.id,
         username: user.username,
         email: user.email,
-        firstName: user.first_name,
-        lastName: user.last_name,
         role: user.role
       }
     });
@@ -86,4 +138,4 @@ router.get('/verify', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

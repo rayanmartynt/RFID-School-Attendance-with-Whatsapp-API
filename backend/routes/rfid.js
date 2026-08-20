@@ -1,64 +1,260 @@
-const express = require('express');
-const { query, getClient } = require('../config/database');
-const { logger } = require('../utils/logger');
+import express from 'express';
+import { db } from '../db/index.js';
+import { rfidCards, students, staff, attendance, staffAttendance, devices, academicYears } from '../db/schema.js';
+import { eq, and, desc, sql } from 'drizzle-orm';
+import { logger } from '../utils/logger.js';
+import moment from 'moment';
 
 const router = express.Router();
 
+// RFID Scan endpoint for Arduino
+router.post('/scan', async (req, res) => {
+  try {
+    const { rfid_uid, device_id } = req.body;
+
+    if (!rfid_uid) {
+      return res.status(400).json({ error: 'rfid_uid is required' });
+    }
+
+    // Find RFID card
+    const rfidResult = await db
+      .select()
+      .from(rfidCards)
+      .where(eq(rfidCards.rfidUid, rfid_uid))
+      .limit(1);
+
+    if (rfidResult.length === 0) {
+      return res.status(404).json({ error: 'RFID card not registered' });
+    }
+
+    const card = rfidResult[0];
+
+    if (card.status !== 'ACTIVE') {
+      return res.status(403).json({ error: 'RFID card is not active' });
+    }
+
+    // Update last used time
+    await db
+      .update(rfidCards)
+      .set({ lastUsed: new Date(), updatedAt: new Date() })
+      .where(eq(rfidCards.id, card.id));
+
+    // Get person details and record attendance
+    if (card.personType === 'STUDENT') {
+      const studentResult = await db
+        .select()
+        .from(students)
+        .where(eq(students.id, card.personId))
+        .limit(1);
+
+      if (studentResult.length === 0) {
+        return res.status(404).json({ error: 'Student not found' });
+      }
+
+      const student = studentResult[0];
+
+      if (student.status !== 'ACTIVE') {
+        return res.status(403).json({ error: 'Student is not active' });
+      }
+
+      // Check for existing attendance today
+      const today = moment().format('YYYY-MM-DD');
+      const existingAttendance = await db
+        .select()
+        .from(attendance)
+        .where(
+          and(
+            eq(attendance.studentId, student.id),
+            sql`DATE(${attendance.date}) = ${today}`
+          )
+        )
+        .limit(1);
+
+      const schoolStartTime = process.env.SCHOOL_TIME_START || '07:50';
+      const currentTime = moment().format('HH:mm');
+      const isLate = currentTime > schoolStartTime;
+
+      if (existingAttendance.length > 0) {
+        // Update departure time
+        await db
+          .update(attendance)
+          .set({
+            departureTime: currentTime,
+            updatedAt: new Date()
+          })
+          .where(eq(attendance.id, existingAttendance[0].id));
+
+        logger.info('Student departure recorded', { studentId: student.id, rfidUid });
+        return res.json({
+          success: true,
+          message: 'Departure recorded',
+          student: {
+            id: student.id,
+            studentId: student.studentId,
+            firstName: student.firstName,
+            lastName: student.lastName
+          },
+          attendance: {
+            ...existingAttendance[0],
+            departureTime: currentTime
+          }
+        });
+      } else {
+        // Create new attendance record
+        const attendanceResult = await db
+          .insert(attendance)
+          .values({
+            studentId: student.id,
+            deviceId: device_id,
+            date: new Date(),
+            arrivalTime: currentTime,
+            status: 'PRESENT',
+            isLate
+          })
+          .returning();
+
+        logger.info('Student arrival recorded', { studentId: student.id, rfidUid, isLate });
+        return res.json({
+          success: true,
+          message: isLate ? 'Late arrival recorded' : 'Arrival recorded',
+          student: {
+            id: student.id,
+            studentId: student.studentId,
+            firstName: student.firstName,
+            lastName: student.lastName
+          },
+          attendance: attendanceResult[0]
+        });
+      }
+    } else if (card.personType === 'STAFF') {
+      const staffResult = await db
+        .select()
+        .from(staff)
+        .where(eq(staff.id, card.personId))
+        .limit(1);
+
+      if (staffResult.length === 0) {
+        return res.status(404).json({ error: 'Staff not found' });
+      }
+
+      const staffMember = staffResult[0];
+
+      if (staffMember.status !== 'ACTIVE') {
+        return res.status(403).json({ error: 'Staff is not active' });
+      }
+
+      // Check for existing attendance today
+      const today = moment().format('YYYY-MM-DD');
+      const existingAttendance = await db
+        .select()
+        .from(staffAttendance)
+        .where(
+          and(
+            eq(staffAttendance.staffId, staffMember.id),
+            sql`DATE(${staffAttendance.date}) = ${today}`
+          )
+        )
+        .limit(1);
+
+      const currentTime = moment().format('HH:mm');
+
+      if (existingAttendance.length > 0) {
+        // Update departure time
+        await db
+          .update(staffAttendance)
+          .set({
+            departureTime: currentTime,
+            updatedAt: new Date()
+          })
+          .where(eq(staffAttendance.id, existingAttendance[0].id));
+
+        logger.info('Staff departure recorded', { staffId: staffMember.id, rfidUid });
+        return res.json({
+          success: true,
+          message: 'Departure recorded',
+          staff: {
+            id: staffMember.id,
+            staffId: staffMember.staffId,
+            firstName: staffMember.firstName,
+            lastName: staffMember.lastName
+          },
+          attendance: {
+            ...existingAttendance[0],
+            departureTime: currentTime
+          }
+        });
+      } else {
+        // Create new attendance record
+        const attendanceResult = await db
+          .insert(staffAttendance)
+          .values({
+            staffId: staffMember.id,
+            deviceId: device_id,
+            date: new Date(),
+            arrivalTime: currentTime,
+            status: 'PRESENT'
+          })
+          .returning();
+
+        logger.info('Staff arrival recorded', { staffId: staffMember.id, rfidUid });
+        return res.json({
+          success: true,
+          message: 'Arrival recorded',
+          staff: {
+            id: staffMember.id,
+            staffId: staffMember.staffId,
+            firstName: staffMember.firstName,
+            lastName: staffMember.lastName
+          },
+          attendance: attendanceResult[0]
+        });
+      }
+    }
+
+    res.status(400).json({ error: 'Invalid person type' });
+  } catch (error) {
+    logger.error('RFID scan error', { error: error.message });
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Register RFID card
 router.post('/register', async (req, res) => {
-  const client = await getClient();
   try {
-    await client.query('BEGIN');
-
     const { rfidUid, personType, personId, deviceId } = req.body;
 
     if (!rfidUid || !personType || !personId) {
-      await client.query('ROLLBACK');
       return res.status(400).json({ error: 'rfidUid, personType, and personId are required' });
     }
 
     // Check if RFID already exists
-    const existingRfid = await client.query(
-      'SELECT * FROM rfid_cards WHERE rfid_uid = $1',
-      [rfidUid]
-    );
+    const existingRfid = await db
+      .select()
+      .from(rfidCards)
+      .where(eq(rfidCards.rfidUid, rfidUid))
+      .limit(1);
 
-    if (existingRfid.rows.length > 0) {
-      await client.query('ROLLBACK');
+    if (existingRfid.length > 0) {
       return res.status(409).json({ error: 'RFID card already registered' });
     }
 
     // Register the card
-    const result = await client.query(
-      `INSERT INTO rfid_cards (rfid_uid, person_type, person_id, status, device_id)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING *`,
-      [rfidUid, personType, personId, 'ACTIVE', deviceId]
-    );
-
-    // Update the person's rfid_uid
-    if (personType === 'STUDENT') {
-      await client.query(
-        'UPDATE students SET rfid_uid = $1 WHERE id = $2',
-        [rfidUid, personId]
-      );
-    } else if (personType === 'STAFF') {
-      await client.query(
-        'UPDATE staff SET rfid_uid = $1 WHERE id = $2',
-        [rfidUid, personId]
-      );
-    }
-
-    await client.query('COMMIT');
+    const result = await db
+      .insert(rfidCards)
+      .values({
+        rfidUid,
+        personType,
+        personId,
+        status: 'ACTIVE',
+        deviceId
+      })
+      .returning();
 
     logger.info('RFID card registered', { rfidUid, personType, personId });
-    res.status(201).json(result.rows[0]);
+    res.status(201).json(result[0]);
   } catch (error) {
-    await client.query('ROLLBACK');
     logger.error('Error registering RFID card', { error: error.message });
     res.status(500).json({ error: 'Internal server error' });
-  } finally {
-    client.release();
   }
 });
 
@@ -67,42 +263,60 @@ router.get('/', async (req, res) => {
   try {
     const { personType, status } = req.query;
 
-    let queryText = `
-      SELECT rc.*, 
-             CASE 
-               WHEN rc.person_type = 'STUDENT' THEN 
-                 (SELECT first_name || ' ' || last_name FROM students WHERE id = rc.person_id)
-               ELSE 
-                 (SELECT first_name || ' ' || last_name FROM staff WHERE id = rc.person_id)
-             END as person_name,
-             CASE 
-               WHEN rc.person_type = 'STUDENT' THEN 
-                 (SELECT student_id FROM students WHERE id = rc.person_id)
-               ELSE 
-                 (SELECT staff_id FROM staff WHERE id = rc.person_id)
-             END as person_id_code
-      FROM rfid_cards rc
-      WHERE 1=1
-    `;
-    const params = [];
-    let paramCount = 1;
+    let query = db
+      .select()
+      .from(rfidCards)
+      .orderBy(desc(rfidCards.createdAt));
 
     if (personType) {
-      queryText += ` AND rc.person_type = $${paramCount}`;
-      params.push(personType);
-      paramCount++;
+      query = query.where(eq(rfidCards.personType, personType));
     }
 
     if (status) {
-      queryText += ` AND rc.status = $${paramCount}`;
-      params.push(status);
-      paramCount++;
+      query = query.where(eq(rfidCards.status, status));
     }
 
-    queryText += ` ORDER BY rc.created_at DESC`;
+    const results = await query;
 
-    const result = await query(queryText, params);
-    res.json(result.rows);
+    // Enrich with person details
+    const enrichedResults = await Promise.all(results.map(async (card) => {
+      let personDetails = null;
+      let personName = '';
+      let personIdCode = '';
+
+      if (card.personType === 'STUDENT') {
+        const studentResult = await db
+          .select()
+          .from(students)
+          .where(eq(students.id, card.personId))
+          .limit(1);
+        if (studentResult.length > 0) {
+          personDetails = studentResult[0];
+          personName = `${studentResult[0].firstName} ${studentResult[0].lastName}`;
+          personIdCode = studentResult[0].studentId;
+        }
+      } else if (card.personType === 'STAFF') {
+        const staffResult = await db
+          .select()
+          .from(staff)
+          .where(eq(staff.id, card.personId))
+          .limit(1);
+        if (staffResult.length > 0) {
+          personDetails = staffResult[0];
+          personName = `${staffResult[0].firstName} ${staffResult[0].lastName}`;
+          personIdCode = staffResult[0].staffId;
+        }
+      }
+
+      return {
+        ...card,
+        personName,
+        personIdCode,
+        person: personDetails
+      };
+    }));
+
+    res.json(enrichedResults);
   } catch (error) {
     logger.error('Error fetching RFID cards', { error: error.message });
     res.status(500).json({ error: 'Internal server error' });
@@ -112,33 +326,42 @@ router.get('/', async (req, res) => {
 // Get RFID card by UID
 router.get('/:uid', async (req, res) => {
   try {
-    const result = await query(
-      'SELECT * FROM rfid_cards WHERE rfid_uid = $1',
-      [req.params.uid]
-    );
+    const result = await db
+      .select()
+      .from(rfidCards)
+      .where(eq(rfidCards.rfidUid, req.params.uid))
+      .limit(1);
 
-    if (result.rows.length === 0) {
+    if (result.length === 0) {
       return res.status(404).json({ error: 'RFID card not found' });
     }
 
-    const card = result.rows[0];
-    let personDetails;
+    const card = result[0];
+    let personDetails = null;
 
-    if (card.person_type === 'STUDENT') {
-      personDetails = await query(
-        'SELECT * FROM students WHERE id = $1',
-        [card.person_id]
-      );
-    } else {
-      personDetails = await query(
-        'SELECT * FROM staff WHERE id = $1',
-        [card.person_id]
-      );
+    if (card.personType === 'STUDENT') {
+      const studentResult = await db
+        .select()
+        .from(students)
+        .where(eq(students.id, card.personId))
+        .limit(1);
+      if (studentResult.length > 0) {
+        personDetails = studentResult[0];
+      }
+    } else if (card.personType === 'STAFF') {
+      const staffResult = await db
+        .select()
+        .from(staff)
+        .where(eq(staff.id, card.personId))
+        .limit(1);
+      if (staffResult.length > 0) {
+        personDetails = staffResult[0];
+      }
     }
 
     res.json({
       card,
-      person: personDetails.rows[0] || null
+      person: personDetails
     });
   } catch (error) {
     logger.error('Error fetching RFID card', { error: error.message });
@@ -151,17 +374,18 @@ router.put('/:uid/status', async (req, res) => {
   try {
     const { status } = req.body;
 
-    const result = await query(
-      'UPDATE rfid_cards SET status = $1 WHERE rfid_uid = $2 RETURNING *',
-      [status, req.params.uid]
-    );
+    const result = await db
+      .update(rfidCards)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(rfidCards.rfidUid, req.params.uid))
+      .returning();
 
-    if (result.rows.length === 0) {
+    if (result.length === 0) {
       return res.status(404).json({ error: 'RFID card not found' });
     }
 
     logger.info('RFID card status updated', { uid: req.params.uid, status });
-    res.json(result.rows[0]);
+    res.json(result[0]);
   } catch (error) {
     logger.error('Error updating RFID card status', { error: error.message });
     res.status(500).json({ error: 'Internal server error' });
@@ -170,79 +394,61 @@ router.put('/:uid/status', async (req, res) => {
 
 // Replace RFID card
 router.put('/:uid/replace', async (req, res) => {
-  const client = await getClient();
   try {
-    await client.query('BEGIN');
-
     const { newRfidUid } = req.body;
 
     if (!newRfidUid) {
-      await client.query('ROLLBACK');
       return res.status(400).json({ error: 'newRfidUid is required' });
     }
 
     // Get existing card
-    const existingCard = await client.query(
-      'SELECT * FROM rfid_cards WHERE rfid_uid = $1',
-      [req.params.uid]
-    );
+    const existingCardResult = await db
+      .select()
+      .from(rfidCards)
+      .where(eq(rfidCards.rfidUid, req.params.uid))
+      .limit(1);
 
-    if (existingCard.rows.length === 0) {
-      await client.query('ROLLBACK');
+    if (existingCardResult.length === 0) {
       return res.status(404).json({ error: 'RFID card not found' });
     }
 
-    const card = existingCard.rows[0];
+    const card = existingCardResult[0];
 
     // Mark old card as replaced
-    await client.query(
-      'UPDATE rfid_cards SET status = $1 WHERE rfid_uid = $2',
-      ['REPLACED', req.params.uid]
-    );
+    await db
+      .update(rfidCards)
+      .set({ status: 'REPLACED', updatedAt: new Date() })
+      .where(eq(rfidCards.rfidUid, req.params.uid));
 
     // Register new card
-    const newCard = await client.query(
-      `INSERT INTO rfid_cards (rfid_uid, person_type, person_id, status, device_id)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING *`,
-      [newRfidUid, card.person_type, card.person_id, 'ACTIVE', card.device_id]
-    );
-
-    // Update person's rfid_uid
-    if (card.person_type === 'STUDENT') {
-      await client.query(
-        'UPDATE students SET rfid_uid = $1 WHERE id = $2',
-        [newRfidUid, card.person_id]
-      );
-    } else if (card.person_type === 'STAFF') {
-      await client.query(
-        'UPDATE staff SET rfid_uid = $1 WHERE id = $2',
-        [newRfidUid, card.person_id]
-      );
-    }
-
-    await client.query('COMMIT');
+    const newCard = await db
+      .insert(rfidCards)
+      .values({
+        rfidUid: newRfidUid,
+        personType: card.personType,
+        personId: card.personId,
+        status: 'ACTIVE',
+        deviceId: card.deviceId
+      })
+      .returning();
 
     logger.info('RFID card replaced', { oldUid: req.params.uid, newUid: newRfidUid });
-    res.json(newCard.rows[0]);
+    res.json(newCard[0]);
   } catch (error) {
-    await client.query('ROLLBACK');
     logger.error('Error replacing RFID card', { error: error.message });
     res.status(500).json({ error: 'Internal server error' });
-  } finally {
-    client.release();
   }
 });
 
 // Delete RFID card
 router.delete('/:uid', async (req, res) => {
   try {
-    const result = await query(
-      'DELETE FROM rfid_cards WHERE rfid_uid = $1 RETURNING *',
-      [req.params.uid]
-    );
+    const result = await db
+      .delete(rfidCards)
+      .where(eq(rfidCards.rfidUid, req.params.uid))
+      .returning();
 
-    if (result.rows.length === 0) {
+    if (result.length === 0) {
       return res.status(404).json({ error: 'RFID card not found' });
     }
 
@@ -254,4 +460,4 @@ router.delete('/:uid', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

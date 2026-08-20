@@ -1,21 +1,31 @@
-const express = require('express');
-const { query } = require('../config/database');
-const { logger } = require('../utils/logger');
+import express from 'express';
+import { db } from '../db/index.js';
+import { classes, academicYears, students, parents } from '../db/schema.js';
+import { eq, desc, sql } from 'drizzle-orm';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
 // Get all classes
 router.get('/', async (req, res) => {
   try {
-    const result = await query(
-      `SELECT c.*, ay.name as academic_year,
-              (SELECT COUNT(*) FROM students WHERE class_id = c.id) as student_count
-       FROM classes c
-       LEFT JOIN academic_years ay ON c.academic_year_id = ay.id
-       ORDER BY c.grade, c.section`
-    );
+    const results = await db
+      .select({
+        class: classes,
+        academicYear: academicYears.name,
+        studentCount: sql`(SELECT COUNT(*) FROM students WHERE class_id = ${classes.id})`
+      })
+      .from(classes)
+      .leftJoin(academicYears, eq(classes.academicYearId, academicYears.id))
+      .orderBy(classes.grade, classes.section);
 
-    res.json(result.rows);
+    const formattedResults = results.map(row => ({
+      ...row.class,
+      academic_year: row.academicYear,
+      student_count: row.studentCount
+    }));
+
+    res.json(formattedResults);
   } catch (error) {
     logger.error('Error fetching classes', { error: error.message });
     res.status(500).json({ error: 'Internal server error' });
@@ -25,31 +35,44 @@ router.get('/', async (req, res) => {
 // Get class by ID with students
 router.get('/:id', async (req, res) => {
   try {
-    const classResult = await query(
-      `SELECT c.*, ay.name as academic_year
-       FROM classes c
-       LEFT JOIN academic_years ay ON c.academic_year_id = ay.id
-       WHERE c.id = $1`,
-      [req.params.id]
-    );
+    const classResult = await db
+      .select({
+        class: classes,
+        academicYear: academicYears.name
+      })
+      .from(classes)
+      .leftJoin(academicYears, eq(classes.academicYearId, academicYears.id))
+      .where(eq(classes.id, parseInt(req.params.id)))
+      .limit(1);
 
-    if (classResult.rows.length === 0) {
+    if (classResult.length === 0) {
       return res.status(404).json({ error: 'Class not found' });
     }
 
-    const studentsResult = await query(
-      `SELECT s.*, p.first_name as parent_first_name, p.last_name as parent_last_name,
-              p.phone as parent_phone, p.whatsapp_number as parent_whatsapp
-       FROM students s
-       LEFT JOIN parents p ON s.parent_id = p.id
-       WHERE s.class_id = $1 AND s.status = 'ACTIVE'
-       ORDER BY s.last_name, s.first_name`,
-      [req.params.id]
-    );
+    const studentsResult = await db
+      .select({
+        student: students,
+        parent: parents
+      })
+      .from(students)
+      .leftJoin(parents, eq(students.parentId, parents.id))
+      .where(and(eq(students.classId, parseInt(req.params.id)), eq(students.status, 'ACTIVE')))
+      .orderBy(students.lastName, students.firstName);
+
+    const formattedStudents = studentsResult.map(row => ({
+      ...row.student,
+      parent_first_name: row.parent?.firstName,
+      parent_last_name: row.parent?.lastName,
+      parent_phone: row.parent?.phone,
+      parent_whatsapp: row.parent?.phone
+    }));
 
     res.json({
-      class: classResult.rows[0],
-      students: studentsResult.rows
+      class: {
+        ...classResult[0].class,
+        academic_year: classResult[0].academicYear
+      },
+      students: formattedStudents
     });
   } catch (error) {
     logger.error('Error fetching class', { error: error.message });
@@ -62,15 +85,18 @@ router.post('/', async (req, res) => {
   try {
     const { grade, section, academic_year_id, capacity } = req.body;
 
-    const result = await query(
-      `INSERT INTO classes (grade, section, academic_year_id, capacity)
-       VALUES ($1, $2, $3, $4)
-       RETURNING *`,
-      [grade, section, academic_year_id, capacity || 40]
-    );
+    const result = await db
+      .insert(classes)
+      .values({
+        grade,
+        section,
+        academicYearId: academic_year_id,
+        capacity: capacity || 40
+      })
+      .returning();
 
-    logger.info('Class created', { classId: result.rows[0].id });
-    res.status(201).json(result.rows[0]);
+    logger.info('Class created', { classId: result[0].id });
+    res.status(201).json(result[0]);
   } catch (error) {
     logger.error('Error creating class', { error: error.message });
     res.status(500).json({ error: 'Internal server error' });
@@ -82,20 +108,24 @@ router.put('/:id', async (req, res) => {
   try {
     const { grade, section, academic_year_id, capacity } = req.body;
 
-    const result = await query(
-      `UPDATE classes 
-       SET grade = $1, section = $2, academic_year_id = $3, capacity = $4
-       WHERE id = $5
-       RETURNING *`,
-      [grade, section, academic_year_id, capacity, req.params.id]
-    );
+    const result = await db
+      .update(classes)
+      .set({
+        grade,
+        section,
+        academicYearId: academic_year_id,
+        capacity,
+        updatedAt: new Date()
+      })
+      .where(eq(classes.id, parseInt(req.params.id)))
+      .returning();
 
-    if (result.rows.length === 0) {
+    if (result.length === 0) {
       return res.status(404).json({ error: 'Class not found' });
     }
 
     logger.info('Class updated', { classId: req.params.id });
-    res.json(result.rows[0]);
+    res.json(result[0]);
   } catch (error) {
     logger.error('Error updating class', { error: error.message });
     res.status(500).json({ error: 'Internal server error' });
@@ -106,23 +136,23 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     // Check if class has students
-    const studentCheck = await query(
-      'SELECT COUNT(*) FROM students WHERE class_id = $1',
-      [req.params.id]
-    );
+    const studentCheck = await db
+      .select({ count: sql`count(*)` })
+      .from(students)
+      .where(eq(students.classId, parseInt(req.params.id)));
 
-    if (parseInt(studentCheck.rows[0].count) > 0) {
+    if (studentCheck[0].count > 0) {
       return res.status(400).json({ 
         error: 'Cannot delete class with enrolled students' 
       });
     }
 
-    const result = await query(
-      'DELETE FROM classes WHERE id = $1 RETURNING *',
-      [req.params.id]
-    );
+    const result = await db
+      .delete(classes)
+      .where(eq(classes.id, parseInt(req.params.id)))
+      .returning();
 
-    if (result.rows.length === 0) {
+    if (result.length === 0) {
       return res.status(404).json({ error: 'Class not found' });
     }
 
@@ -134,4 +164,4 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

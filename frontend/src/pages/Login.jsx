@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { GraduationCap } from 'lucide-react'
+import { useTheme } from '../context/ThemeContext'
+import { GraduationCap, Sun, Moon } from 'lucide-react'
 
 const Login = () => {
   const [username, setUsername] = useState('')
@@ -9,6 +10,7 @@ const Login = () => {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
+  const { toggleTheme, isDark } = useTheme()
   const navigate = useNavigate()
 
   const handleSubmit = async (e) => {
@@ -28,25 +30,34 @@ const Login = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center mb-4">
-            <GraduationCap size={32} className="text-white" />
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4 transition-colors duration-200">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-soft p-8 w-full max-w-md border border-gray-200 dark:border-gray-700">
+        <div className="flex justify-between items-start mb-8">
+          <div className="flex flex-col items-center flex-1">
+            <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-primary-600 dark:from-primary-600 dark:to-primary-700 rounded-2xl flex items-center justify-center mb-4 shadow-lg">
+              <GraduationCap size={32} className="text-white" />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">School Attendance</h1>
+            <p className="text-gray-500 dark:text-gray-400 mt-1">Sign in to your account</p>
           </div>
-          <h1 className="text-2xl font-bold text-gray-800">School Attendance</h1>
-          <p className="text-gray-500">Sign in to your account</p>
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {isDark ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg mb-4">
+          <div className="bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800 text-danger-600 dark:text-danger-400 px-4 py-3 rounded-lg mb-4 text-sm">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Username
             </label>
             <input
@@ -60,7 +71,7 @@ const Login = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Password
             </label>
             <input
@@ -81,10 +92,6 @@ const Login = () => {
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
-
-        <div className="mt-6 text-center text-sm text-gray-500">
-          <p>Default credentials: admin / admin123</p>
-        </div>
       </div>
     </div>
   )

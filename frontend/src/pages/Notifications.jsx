@@ -48,42 +48,46 @@ const Notifications = () => {
   }
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64">Loading...</div>
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-800">WhatsApp Notifications</h1>
-        <p className="text-gray-500">View notification history and statistics</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">WhatsApp Notifications</h1>
+        <p className="text-gray-500 dark:text-gray-400 mt-1">View notification history and statistics</p>
       </div>
 
       {statistics && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="card">
             <div className="flex items-center gap-3">
-              <CheckCircle className="text-success" size={24} />
+              <CheckCircle className="text-success-600 dark:text-success-400" size={24} />
               <div>
-                <p className="text-sm text-gray-500">Sent Today</p>
-                <p className="text-2xl font-bold">{statistics.totalSent}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Sent Today</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{statistics.totalSent}</p>
               </div>
             </div>
           </div>
           <div className="card">
             <div className="flex items-center gap-3">
-              <XCircle className="text-danger" size={24} />
+              <XCircle className="text-danger-600 dark:text-danger-400" size={24} />
               <div>
-                <p className="text-sm text-gray-500">Failed Today</p>
-                <p className="text-2xl font-bold">{statistics.totalFailed}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Failed Today</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{statistics.totalFailed}</p>
               </div>
             </div>
           </div>
           <div className="card">
             <div className="flex items-center gap-3">
-              <Bell className="text-primary" size={24} />
+              <Bell className="text-primary-600 dark:text-primary-400" size={24} />
               <div>
-                <p className="text-sm text-gray-500">Total Today</p>
-                <p className="text-2xl font-bold">{statistics.totalSent + statistics.totalFailed}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Total Today</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{statistics.totalSent + statistics.totalFailed}</p>
               </div>
             </div>
           </div>
@@ -92,7 +96,7 @@ const Notifications = () => {
 
       <div className="card">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">Notification Logs</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Notification Logs</h3>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -120,7 +124,7 @@ const Notifications = () => {
             <tbody>
               {logs.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="text-center py-8 text-gray-500">
+                  <td colSpan="6" className="text-center py-8 text-gray-500 dark:text-gray-400">
                     No notification logs found
                   </td>
                 </tr>
@@ -130,18 +134,18 @@ const Notifications = () => {
                     <td>
                       <div className="flex items-center gap-2">
                         {getStatusIcon(log.status)}
-                        <span className="font-medium">{log.status}</span>
+                        <span className="font-medium text-gray-900 dark:text-gray-100">{log.status}</span>
                       </div>
                     </td>
-                    <td>
+                    <td className="text-gray-700 dark:text-gray-300">
                       {log.student_first_name} {log.student_last_name}
                     </td>
-                    <td>
+                    <td className="text-gray-700 dark:text-gray-300">
                       {log.parent_first_name} {log.parent_last_name}
                     </td>
-                    <td>{log.notification_type}</td>
-                    <td className="font-mono text-sm">{log.phone_number}</td>
-                    <td>
+                    <td className="text-gray-700 dark:text-gray-300">{log.notification_type}</td>
+                    <td className="font-mono text-sm text-gray-600 dark:text-gray-400">{log.phone_number}</td>
+                    <td className="text-gray-700 dark:text-gray-300">
                       {new Date(log.sent_at).toLocaleString()}
                     </td>
                   </tr>

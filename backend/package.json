@@ -2,6 +2,7 @@
   "name": "rfid-attendance-backend",
   "version": "1.0.0",
   "description": "Smart School Attendance Management System Backend",
+  "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -22,6 +23,7 @@
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
+    "drizzle-orm": "^0.45.2",
     "express": "^4.18.2",
     "express-rate-limit": "^7.1.5",
     "helmet": "^7.1.0",
@@ -29,11 +31,13 @@
     "jsonwebtoken": "^9.0.2",
     "moment": "^2.29.4",
     "pg": "^8.11.3",
+    "postgres": "^3.4.9",
     "socket.io": "^4.6.0",
     "winston": "^3.11.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "drizzle-kit": "^0.31.10",
     "nodemon": "^3.0.2"
   }
 }

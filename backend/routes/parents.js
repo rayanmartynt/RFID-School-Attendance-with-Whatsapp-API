@@ -1,6 +1,8 @@
-const express = require('express');
-const { query } = require('../config/database');
-const { logger } = require('../utils/logger');
+import express from 'express';
+import { db } from '../db/index.js';
+import { parents, students, classes } from '../db/schema.js';
+import { eq, desc, like, or, sql, and } from 'drizzle-orm';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -10,42 +12,49 @@ router.get('/', async (req, res) => {
     const { page = 1, limit = 10, search } = req.query;
     const offset = (page - 1) * limit;
 
-    let queryText = `
-      SELECT p.*, 
-             (SELECT COUNT(*) FROM students WHERE parent_id = p.id) as student_count
-      FROM parents p
-      WHERE 1=1
-    `;
-    const params = [];
-    let paramCount = 1;
+    let query = db
+      .select({
+        parent: parents,
+        studentCount: sql`(SELECT COUNT(*) FROM students WHERE parent_id = ${parents.id})`
+      })
+      .from(parents)
+      .orderBy(desc(parents.createdAt))
+      .limit(limit)
+      .offset(offset);
 
+    // Apply filters
+    const conditions = [];
     if (search) {
-      queryText += ` AND (p.first_name ILIKE $${paramCount} OR p.last_name ILIKE $${paramCount} OR p.phone ILIKE $${paramCount})`;
-      params.push(`%${search}%`);
-      paramCount++;
+      conditions.push(
+        or(
+          like(parents.firstName, `%${search}%`),
+          like(parents.lastName, `%${search}%`),
+          like(parents.phone, `%${search}%`)
+        )
+      );
     }
 
-    queryText += ` ORDER BY p.created_at DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
-    params.push(limit, offset);
+    if (conditions.length > 0) {
+      query = query.where(...conditions);
+    }
 
-    const result = await query(queryText, params);
+    const results = await query;
 
     // Get total count
-    let countQuery = `SELECT COUNT(*) FROM parents WHERE 1=1`;
-    const countParams = [];
-    let countParamCount = 1;
-
-    if (search) {
-      countQuery += ` AND (first_name ILIKE $${countParamCount} OR last_name ILIKE $${countParamCount} OR phone ILIKE $${countParamCount})`;
-      countParams.push(`%${search}%`);
-      countParamCount++;
+    let countQuery = db.select({ count: sql`count(*)` }).from(parents);
+    if (conditions.length > 0) {
+      countQuery = countQuery.where(...conditions);
     }
+    const countResult = await countQuery;
+    const total = countResult[0].count;
 
-    const countResult = await query(countQuery, countParams);
-    const total = parseInt(countResult.rows[0].count);
+    const formattedResults = results.map(row => ({
+      ...row.parent,
+      student_count: row.studentCount
+    }));
 
     res.json({
-      parents: result.rows,
+      parents: formattedResults,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -62,23 +71,34 @@ router.get('/', async (req, res) => {
 // Get parent by ID with associated students
 router.get('/:id', async (req, res) => {
   try {
-    const parentResult = await query('SELECT * FROM parents WHERE id = $1', [req.params.id]);
+    const parentResult = await db
+      .select()
+      .from(parents)
+      .where(eq(parents.id, parseInt(req.params.id)))
+      .limit(1);
 
-    if (parentResult.rows.length === 0) {
+    if (parentResult.length === 0) {
       return res.status(404).json({ error: 'Parent not found' });
     }
 
-    const studentsResult = await query(
-      `SELECT s.*, c.grade, c.section 
-       FROM students s
-       LEFT JOIN classes c ON s.class_id = c.id
-       WHERE s.parent_id = $1`,
-      [req.params.id]
-    );
+    const studentsResult = await db
+      .select({
+        student: students,
+        class: classes
+      })
+      .from(students)
+      .leftJoin(classes, eq(students.classId, classes.id))
+      .where(eq(students.parentId, parseInt(req.params.id)));
+
+    const formattedStudents = studentsResult.map(row => ({
+      ...row.student,
+      grade: row.class?.grade,
+      section: row.class?.section
+    }));
 
     res.json({
-      parent: parentResult.rows[0],
-      students: studentsResult.rows
+      parent: parentResult[0],
+      students: formattedStudents
     });
   } catch (error) {
     logger.error('Error fetching parent', { error: error.message });
@@ -90,21 +110,23 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const {
-      first_name, last_name, phone, whatsapp_number,
-      email, address, notifications_enabled
+      first_name, last_name, phone, email, address, notification_enabled
     } = req.body;
 
-    const result = await query(
-      `INSERT INTO parents (first_name, last_name, phone, whatsapp_number, 
-                           email, address, notifications_enabled)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING *`,
-      [first_name, last_name, phone, whatsapp_number || phone,
-       email, address, notifications_enabled !== undefined ? notifications_enabled : true]
-    );
+    const result = await db
+      .insert(parents)
+      .values({
+        firstName: first_name,
+        lastName: last_name,
+        phone,
+        email,
+        address,
+        notificationEnabled: notification_enabled !== undefined ? notification_enabled : true
+      })
+      .returning();
 
-    logger.info('Parent created', { parentId: result.rows[0].id });
-    res.status(201).json(result.rows[0]);
+    logger.info('Parent created', { parentId: result[0].id });
+    res.status(201).json(result[0]);
   } catch (error) {
     logger.error('Error creating parent', { error: error.message });
     res.status(500).json({ error: 'Internal server error' });
@@ -115,26 +137,29 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const {
-      first_name, last_name, phone, whatsapp_number,
-      email, address, notifications_enabled
+      first_name, last_name, phone, email, address, notification_enabled
     } = req.body;
 
-    const result = await query(
-      `UPDATE parents 
-       SET first_name = $1, last_name = $2, phone = $3, whatsapp_number = $4,
-           email = $5, address = $6, notifications_enabled = $7
-       WHERE id = $8
-       RETURNING *`,
-      [first_name, last_name, phone, whatsapp_number || phone,
-       email, address, notifications_enabled, req.params.id]
-    );
+    const result = await db
+      .update(parents)
+      .set({
+        firstName: first_name,
+        lastName: last_name,
+        phone,
+        email,
+        address,
+        notificationEnabled: notification_enabled,
+        updatedAt: new Date()
+      })
+      .where(eq(parents.id, parseInt(req.params.id)))
+      .returning();
 
-    if (result.rows.length === 0) {
+    if (result.length === 0) {
       return res.status(404).json({ error: 'Parent not found' });
     }
 
     logger.info('Parent updated', { parentId: req.params.id });
-    res.json(result.rows[0]);
+    res.json(result[0]);
   } catch (error) {
     logger.error('Error updating parent', { error: error.message });
     res.status(500).json({ error: 'Internal server error' });
@@ -145,23 +170,23 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     // Check if parent has associated students
-    const studentCheck = await query(
-      'SELECT COUNT(*) FROM students WHERE parent_id = $1',
-      [req.params.id]
-    );
+    const studentCheck = await db
+      .select({ count: sql`count(*)` })
+      .from(students)
+      .where(eq(students.parentId, parseInt(req.params.id)));
 
-    if (parseInt(studentCheck.rows[0].count) > 0) {
+    if (studentCheck[0].count > 0) {
       return res.status(400).json({ 
         error: 'Cannot delete parent with associated students' 
       });
     }
 
-    const result = await query(
-      'DELETE FROM parents WHERE id = $1 RETURNING *',
-      [req.params.id]
-    );
+    const result = await db
+      .delete(parents)
+      .where(eq(parents.id, parseInt(req.params.id)))
+      .returning();
 
-    if (result.rows.length === 0) {
+    if (result.length === 0) {
       return res.status(404).json({ error: 'Parent not found' });
     }
 
@@ -173,4 +198,4 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

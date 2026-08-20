@@ -1,31 +1,35 @@
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
-const http = require('http');
-const { Server } = require('socket.io');
-const path = require('path');
+import 'dotenv/config';
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import http from 'http';
+import { Server } from 'socket.io';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Import routes
-const authRoutes = require('./routes/auth');
-const studentRoutes = require('./routes/students');
-const staffRoutes = require('./routes/staff');
-const parentRoutes = require('./routes/parents');
-const classRoutes = require('./routes/classes');
-const attendanceRoutes = require('./routes/attendance');
-const staffAttendanceRoutes = require('./routes/staffAttendance');
-const rfidRoutes = require('./routes/rfid');
-const deviceRoutes = require('./routes/devices');
-const dashboardRoutes = require('./routes/dashboard');
-const notificationRoutes = require('./routes/notifications');
-const reportRoutes = require('./routes/reports');
-const excelRoutes = require('./routes/excel');
+import authRoutes from './routes/auth.js';
+import studentRoutes from './routes/students.js';
+import staffRoutes from './routes/staff.js';
+import parentRoutes from './routes/parents.js';
+import classRoutes from './routes/classes.js';
+import attendanceRoutes from './routes/attendance.js';
+import staffAttendanceRoutes from './routes/staffAttendance.js';
+import rfidRoutes from './routes/rfid.js';
+import deviceRoutes from './routes/devices.js';
+import dashboardRoutes from './routes/dashboard.js';
+import notificationRoutes from './routes/notifications.js';
+import reportRoutes from './routes/reports.js';
+import excelRoutes from './routes/excel.js';
 
 // Import middleware
-const { authenticateToken } = require('./middleware/auth');
-const { errorHandler } = require('./middleware/errorHandler');
-const { logger } = require('./utils/logger');
+import { authenticateToken } from './middleware/auth.js';
+import { errorHandler } from './middleware/errorHandler.js';
+import { logger } from './utils/logger.js';
 
 // Initialize Express app
 const app = express();
@@ -83,6 +87,7 @@ io.on('connection', (socket) => {
 });
 
 // API Routes
+app.use('/api/v1/auth/setup', authRoutes); // No auth for initial setup
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/students', authenticateToken, studentRoutes);
 app.use('/api/v1/staff', authenticateToken, staffRoutes);
@@ -91,6 +96,7 @@ app.use('/api/v1/classes', authenticateToken, classRoutes);
 app.use('/api/v1/attendance', attendanceRoutes);
 app.use('/api/v1/staff-attendance', staffAttendanceRoutes);
 app.use('/api/v1/rfid', rfidRoutes);
+app.use('/api/v1/devices/setup', deviceRoutes); // No auth for device setup
 app.use('/api/v1/devices', authenticateToken, deviceRoutes);
 app.use('/api/v1/dashboard', authenticateToken, dashboardRoutes);
 app.use('/api/v1/notifications', authenticateToken, notificationRoutes);
@@ -117,4 +123,4 @@ server.listen(PORT, () => {
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 
-module.exports = { app, io };
+export { app, io };

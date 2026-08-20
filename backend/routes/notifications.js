@@ -1,18 +1,20 @@
-const express = require('express');
-const { query } = require('../config/database');
-const { logger } = require('../utils/logger');
+import express from 'express';
+import { db } from '../db/index.js';
+import { notifications, notificationHistory, students, parents } from '../db/schema.js';
+import { eq, desc, and, sql } from 'drizzle-orm';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
 // Get notification settings for a student
 router.get('/student/:studentId', async (req, res) => {
   try {
-    const result = await query(
-      'SELECT * FROM notifications WHERE student_id = $1',
-      [req.params.studentId]
-    );
+    const result = await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.studentId, parseInt(req.params.studentId)));
 
-    res.json(result.rows);
+    res.json(result);
   } catch (error) {
     logger.error('Error fetching notification settings', { error: error.message });
     res.status(500).json({ error: 'Internal server error' });
@@ -24,21 +26,36 @@ router.put('/student/:studentId', async (req, res) => {
   try {
     const { notificationType, enabled } = req.body;
 
-    const result = await query(
-      `INSERT INTO notifications (student_id, parent_id, notification_type, enabled)
-       VALUES ($1, (SELECT parent_id FROM students WHERE id = $1), $2, $3)
-       ON CONFLICT (student_id, parent_id, notification_type)
-       DO UPDATE SET enabled = $3
-       RETURNING *`,
-      [req.params.studentId, notificationType, enabled]
-    );
+    const studentResult = await db
+      .select({ parentId: students.parentId })
+      .from(students)
+      .where(eq(students.id, parseInt(req.params.studentId)))
+      .limit(1);
+
+    if (studentResult.length === 0) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    const result = await db
+      .insert(notifications)
+      .values({
+        studentId: parseInt(req.params.studentId),
+        parentId: studentResult[0].parentId,
+        notificationType,
+        enabled
+      })
+      .onConflictDoUpdate({
+        target: [notifications.studentId, notifications.parentId, notifications.notificationType],
+        set: { enabled }
+      })
+      .returning();
 
     logger.info('Notification settings updated', { 
       studentId: req.params.studentId, 
       notificationType, 
       enabled 
     });
-    res.json(result.rows[0]);
+    res.json(result[0]);
   } catch (error) {
     logger.error('Error updating notification settings', { error: error.message });
     res.status(500).json({ error: 'Internal server error' });
@@ -51,36 +68,43 @@ router.get('/logs', async (req, res) => {
     const { studentId, status, page = 1, limit = 10 } = req.query;
     const offset = (page - 1) * limit;
 
-    let queryText = `
-      SELECT nl.*, s.first_name as student_first_name, s.last_name as student_last_name,
-             p.first_name as parent_first_name, p.last_name as parent_last_name
-      FROM notification_logs nl
-      LEFT JOIN students s ON nl.student_id = s.id
-      LEFT JOIN parents p ON nl.parent_id = p.id
-      WHERE 1=1
-    `;
-    const params = [];
-    let paramCount = 1;
+    let query = db
+      .select({
+        log: notificationHistory,
+        student: students,
+        parent: parents
+      })
+      .from(notificationHistory)
+      .leftJoin(students, eq(notificationHistory.studentId, students.id))
+      .leftJoin(parents, eq(notificationHistory.parentId, parents.id))
+      .orderBy(desc(notificationHistory.sentAt))
+      .limit(limit)
+      .offset(offset);
 
+    const conditions = [];
     if (studentId) {
-      queryText += ` AND nl.student_id = $${paramCount}`;
-      params.push(studentId);
-      paramCount++;
+      conditions.push(eq(notificationHistory.studentId, parseInt(studentId)));
     }
-
     if (status) {
-      queryText += ` AND nl.status = $${paramCount}`;
-      params.push(status);
-      paramCount++;
+      conditions.push(eq(notificationHistory.status, status));
     }
 
-    queryText += ` ORDER BY nl.sent_at DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
-    params.push(limit, offset);
+    if (conditions.length > 0) {
+      query = query.where(...conditions);
+    }
 
-    const result = await query(queryText, params);
+    const results = await query;
+
+    const formattedResults = results.map(row => ({
+      ...row.log,
+      student_first_name: row.student?.firstName,
+      student_last_name: row.student?.lastName,
+      parent_first_name: row.parent?.firstName,
+      parent_last_name: row.parent?.lastName
+    }));
 
     res.json({
-      logs: result.rows,
+      logs: formattedResults,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit)
@@ -97,31 +121,40 @@ router.get('/statistics', async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
 
-    const totalSentResult = await query(
-      `SELECT COUNT(*) as count FROM notification_logs 
-       WHERE DATE(sent_at) = $1 AND status = $2`,
-      [today, 'SENT']
-    );
+    const totalSentResult = await db
+      .select({ count: sql`count(*)` })
+      .from(notificationHistory)
+      .where(
+        and(
+          sql`DATE(${notificationHistory.sentAt}) = ${today}`,
+          eq(notificationHistory.status, 'SENT')
+        )
+      );
 
-    const totalFailedResult = await query(
-      `SELECT COUNT(*) as count FROM notification_logs 
-       WHERE DATE(sent_at) = $1 AND status = $2`,
-      [today, 'FAILED']
-    );
+    const totalFailedResult = await db
+      .select({ count: sql`count(*)` })
+      .from(notificationHistory)
+      .where(
+        and(
+          sql`DATE(${notificationHistory.sentAt}) = ${today}`,
+          eq(notificationHistory.status, 'FAILED')
+        )
+      );
 
-    const byTypeResult = await query(
-      `SELECT notification_type, COUNT(*) as count 
-       FROM notification_logs 
-       WHERE DATE(sent_at) = $1
-       GROUP BY notification_type`,
-      [today]
-    );
+    const byTypeResult = await db
+      .select({
+        notificationType: notificationHistory.notificationType,
+        count: sql`count(*)`
+      })
+      .from(notificationHistory)
+      .where(sql`DATE(${notificationHistory.sentAt}) = ${today}`)
+      .groupBy(notificationHistory.notificationType);
 
     res.json({
       date: today,
-      totalSent: parseInt(totalSentResult.rows[0].count),
-      totalFailed: parseInt(totalFailedResult.rows[0].count),
-      byType: byTypeResult.rows
+      totalSent: totalSentResult[0].count,
+      totalFailed: totalFailedResult[0].count,
+      byType: byTypeResult
     });
   } catch (error) {
     logger.error('Error fetching notification statistics', { error: error.message });
@@ -129,4 +162,4 @@ router.get('/statistics', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

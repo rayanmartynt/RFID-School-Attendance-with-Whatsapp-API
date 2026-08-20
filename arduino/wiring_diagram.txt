@@ -13,11 +13,19 @@ RC522 RFID Reader Module:
   3.3V      → Arduino 3.3V
   GND       → Arduino GND
 
-LCD 16x2 with I2C Adapter:
-  SDA       → Arduino Pin A4 (SDA)
-  SCL       → Arduino Pin A5 (SCL)
-  VCC       → Arduino 5V
-  GND       → Arduino GND
+LCD 16x2 1602 (Parallel Connection):
+  RS        → Arduino Pin 2
+  EN        → Arduino Pin 3
+  D4        → Arduino Pin 4
+  D5        → Arduino Pin A0
+  D6        → Arduino Pin A1
+  D7        → Arduino Pin A2
+  VSS       → Arduino GND
+  VDD       → Arduino 5V
+  V0        → Arduino GND (for maximum contrast)
+  RW        → Arduino GND
+  A         → Arduino 5V (through 220Ω resistor)
+  K         → Arduino GND
 
 Green LED:
   Anode (+) → Arduino Pin 5 (with 220Ω resistor)
