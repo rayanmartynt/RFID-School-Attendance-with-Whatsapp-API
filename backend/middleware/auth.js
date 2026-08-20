@@ -1,5 +1,5 @@
-const jwt = require('jsonwebtoken');
-const { logger } = require('../utils/logger');
+import jwt from 'jsonwebtoken';
+import { logger } from '../utils/logger.js';
 
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -36,7 +36,7 @@ const authenticateDevice = (req, res, next) => {
   next();
 };
 
-module.exports = {
+export {
   authenticateToken,
   authenticateDevice
 };

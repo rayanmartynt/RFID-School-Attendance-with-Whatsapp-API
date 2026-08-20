@@ -1,17 +1,20 @@
-const express = require('express');
-const { query } = require('../config/database');
-const { logger } = require('../utils/logger');
+import express from 'express';
+import { db } from '../db/index.js';
+import { devices } from '../db/schema.js';
+import { eq, desc } from 'drizzle-orm';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
 // Get all devices
 router.get('/', async (req, res) => {
   try {
-    const result = await query(
-      'SELECT * FROM devices ORDER BY created_at DESC'
-    );
+    const results = await db
+      .select()
+      .from(devices)
+      .orderBy(desc(devices.createdAt));
 
-    res.json(result.rows);
+    res.json(results);
   } catch (error) {
     logger.error('Error fetching devices', { error: error.message });
     res.status(500).json({ error: 'Internal server error' });
@@ -21,16 +24,17 @@ router.get('/', async (req, res) => {
 // Get device by ID
 router.get('/:id', async (req, res) => {
   try {
-    const result = await query(
-      'SELECT * FROM devices WHERE device_id = $1',
-      [req.params.id]
-    );
+    const result = await db
+      .select()
+      .from(devices)
+      .where(eq(devices.deviceId, req.params.id))
+      .limit(1);
 
-    if (result.rows.length === 0) {
+    if (result.length === 0) {
       return res.status(404).json({ error: 'Device not found' });
     }
 
-    res.json(result.rows[0]);
+    res.json(result[0]);
   } catch (error) {
     logger.error('Error fetching device', { error: error.message });
     res.status(500).json({ error: 'Internal server error' });
@@ -42,17 +46,47 @@ router.post('/', async (req, res) => {
   try {
     const { device_id, device_name, location, device_type, api_key } = req.body;
 
-    const result = await query(
-      `INSERT INTO devices (device_id, device_name, location, device_type, api_key, status)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING *`,
-      [device_id, device_name, location, device_type, api_key, 'ONLINE']
-    );
+    const result = await db
+      .insert(devices)
+      .values({
+        deviceId: device_id,
+        deviceName: device_name,
+        location,
+        deviceType: device_type,
+        apiKey: api_key,
+        status: 'ONLINE'
+      })
+      .returning();
 
-    logger.info('Device created', { deviceId: result.rows[0].device_id });
-    res.status(201).json(result.rows[0]);
+    logger.info('Device created', { deviceId: result[0].deviceId });
+    res.status(201).json(result[0]);
   } catch (error) {
     logger.error('Error creating device', { error: error.message });
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Create device without auth (for setup)
+router.post('/setup', async (req, res) => {
+  try {
+    const { device_id, device_name, location, device_type, api_key } = req.body;
+
+    const result = await db
+      .insert(devices)
+      .values({
+        deviceId: device_id,
+        deviceName: device_name,
+        location,
+        deviceType: device_type,
+        apiKey: api_key,
+        status: 'ONLINE'
+      })
+      .returning();
+
+    logger.info('Device created via setup', { deviceId: result[0].deviceId });
+    res.status(201).json(result[0]);
+  } catch (error) {
+    logger.error('Error creating device via setup', { error: error.message });
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -62,20 +96,24 @@ router.put('/:id', async (req, res) => {
   try {
     const { device_name, location, device_type, status } = req.body;
 
-    const result = await query(
-      `UPDATE devices 
-       SET device_name = $1, location = $2, device_type = $3, status = $4
-       WHERE device_id = $5
-       RETURNING *`,
-      [device_name, location, device_type, status, req.params.id]
-    );
+    const result = await db
+      .update(devices)
+      .set({
+        deviceName: device_name,
+        location,
+        deviceType: device_type,
+        status,
+        updatedAt: new Date()
+      })
+      .where(eq(devices.deviceId, req.params.id))
+      .returning();
 
-    if (result.rows.length === 0) {
+    if (result.length === 0) {
       return res.status(404).json({ error: 'Device not found' });
     }
 
     logger.info('Device updated', { deviceId: req.params.id });
-    res.json(result.rows[0]);
+    res.json(result[0]);
   } catch (error) {
     logger.error('Error updating device', { error: error.message });
     res.status(500).json({ error: 'Internal server error' });
@@ -87,17 +125,18 @@ router.put('/:id/status', async (req, res) => {
   try {
     const { status } = req.body;
 
-    const result = await query(
-      'UPDATE devices SET status = $1 WHERE device_id = $2 RETURNING *',
-      [status, req.params.id]
-    );
+    const result = await db
+      .update(devices)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(devices.deviceId, req.params.id))
+      .returning();
 
-    if (result.rows.length === 0) {
+    if (result.length === 0) {
       return res.status(404).json({ error: 'Device not found' });
     }
 
     logger.info('Device status updated', { deviceId: req.params.id, status });
-    res.json(result.rows[0]);
+    res.json(result[0]);
   } catch (error) {
     logger.error('Error updating device status', { error: error.message });
     res.status(500).json({ error: 'Internal server error' });
@@ -107,12 +146,12 @@ router.put('/:id/status', async (req, res) => {
 // Delete device
 router.delete('/:id', async (req, res) => {
   try {
-    const result = await query(
-      'DELETE FROM devices WHERE device_id = $1 RETURNING *',
-      [req.params.id]
-    );
+    const result = await db
+      .delete(devices)
+      .where(eq(devices.deviceId, req.params.id))
+      .returning();
 
-    if (result.rows.length === 0) {
+    if (result.length === 0) {
       return res.status(404).json({ error: 'Device not found' });
     }
 
@@ -124,4 +163,4 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

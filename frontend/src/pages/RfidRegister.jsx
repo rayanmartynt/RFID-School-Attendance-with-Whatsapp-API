@@ -90,18 +90,18 @@ const RfidRegister = () => {
       <div className="flex items-center gap-4">
         <button
           onClick={() => navigate('/rfid-cards')}
-          className="text-gray-600 hover:text-gray-800"
+          className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-colors"
         >
           <ArrowLeft size={24} />
         </button>
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Register RFID Card</h1>
-          <p className="text-gray-500">Assign an RFID card to a person</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Register RFID Card</h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Assign an RFID card to a person</p>
         </div>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg">
+        <div className="bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800 text-danger-600 dark:text-danger-400 px-4 py-3 rounded-lg">
           {error}
         </div>
       )}
@@ -110,7 +110,7 @@ const RfidRegister = () => {
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Person Type *
               </label>
               <select
@@ -126,7 +126,7 @@ const RfidRegister = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 {formData.personType === 'STUDENT' ? 'Student' : 'Staff'} *
               </label>
               <select
@@ -153,7 +153,7 @@ const RfidRegister = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 RFID UID *
               </label>
               <div className="flex gap-2">
@@ -179,7 +179,7 @@ const RfidRegister = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Device *
               </label>
               <select

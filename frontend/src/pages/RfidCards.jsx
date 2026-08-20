@@ -48,15 +48,19 @@ const RfidCards = () => {
   }
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64">Loading...</div>
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">RFID Cards</h1>
-          <p className="text-gray-500">Manage RFID card registrations</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">RFID Cards</h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Manage RFID card registrations</p>
         </div>
         <Link to="/rfid-register" className="btn-primary flex items-center gap-2">
           <CreditCard size={20} />
@@ -107,29 +111,29 @@ const RfidCards = () => {
             <tbody>
               {cards.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="text-center py-8 text-gray-500">
+                  <td colSpan="8" className="text-center py-8 text-gray-500 dark:text-gray-400">
                     No RFID cards found
                   </td>
                 </tr>
               ) : (
                 cards.map((card) => (
                   <tr key={card.id}>
-                    <td className="font-mono text-sm font-medium">{card.rfid_uid}</td>
-                    <td>{card.person_name}</td>
-                    <td>{card.person_type}</td>
-                    <td>{card.person_id_code}</td>
-                    <td>{card.device_id || 'N/A'}</td>
+                    <td className="font-mono text-sm font-medium text-gray-900 dark:text-gray-100">{card.rfid_uid}</td>
+                    <td className="text-gray-700 dark:text-gray-300">{card.person_name}</td>
+                    <td className="text-gray-700 dark:text-gray-300">{card.person_type}</td>
+                    <td className="text-gray-700 dark:text-gray-300">{card.person_id_code}</td>
+                    <td className="text-gray-700 dark:text-gray-300">{card.device_id || 'N/A'}</td>
                     <td>
                       <span className={`badge ${getStatusBadge(card.status)}`}>
                         {card.status}
                       </span>
                     </td>
-                    <td>{card.last_used ? new Date(card.last_used).toLocaleString() : 'Never'}</td>
+                    <td className="text-gray-700 dark:text-gray-300">{card.last_used ? new Date(card.last_used).toLocaleString() : 'Never'}</td>
                     <td>
                       <select
                         value={card.status}
                         onChange={(e) => handleStatusChange(card.rfid_uid, e.target.value)}
-                        className="text-sm border rounded px-2 py-1"
+                        className="text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                       >
                         <option value="ACTIVE">Active</option>
                         <option value="DISABLED">Disable</option>

@@ -1,6 +1,8 @@
-const express = require('express');
-const { query } = require('../config/database');
-const { logger } = require('../utils/logger');
+import express from 'express';
+import { db } from '../db/index.js';
+import { staff } from '../db/schema.js';
+import { eq, desc, like, or, sql } from 'drizzle-orm';
+import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -10,64 +12,47 @@ router.get('/', async (req, res) => {
     const { page = 1, limit = 10, search, department, status } = req.query;
     const offset = (page - 1) * limit;
 
-    let queryText = `
-      SELECT * FROM staff
-      WHERE 1=1
-    `;
-    const params = [];
-    let paramCount = 1;
+    let query = db
+      .select()
+      .from(staff)
+      .orderBy(desc(staff.createdAt))
+      .limit(limit)
+      .offset(offset);
 
+    // Apply filters
+    const conditions = [];
     if (search) {
-      queryText += ` AND (first_name ILIKE $${paramCount} OR last_name ILIKE $${paramCount} OR staff_id ILIKE $${paramCount})`;
-      params.push(`%${search}%`);
-      paramCount++;
+      conditions.push(
+        or(
+          like(staff.firstName, `%${search}%`),
+          like(staff.lastName, `%${search}%`),
+          like(staff.staffId, `%${search}%`)
+        )
+      );
     }
-
     if (department) {
-      queryText += ` AND department = $${paramCount}`;
-      params.push(department);
-      paramCount++;
+      conditions.push(eq(staff.department, department));
     }
-
     if (status) {
-      queryText += ` AND status = $${paramCount}`;
-      params.push(status);
-      paramCount++;
+      conditions.push(eq(staff.status, status));
     }
 
-    queryText += ` ORDER BY created_at DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
-    params.push(limit, offset);
+    if (conditions.length > 0) {
+      query = query.where(...conditions);
+    }
 
-    const result = await query(queryText, params);
+    const results = await query;
 
     // Get total count
-    let countQuery = `SELECT COUNT(*) FROM staff WHERE 1=1`;
-    const countParams = [];
-    let countParamCount = 1;
-
-    if (search) {
-      countQuery += ` AND (first_name ILIKE $${countParamCount} OR last_name ILIKE $${countParamCount} OR staff_id ILIKE $${countParamCount})`;
-      countParams.push(`%${search}%`);
-      countParamCount++;
+    let countQuery = db.select({ count: sql`count(*)` }).from(staff);
+    if (conditions.length > 0) {
+      countQuery = countQuery.where(...conditions);
     }
-
-    if (department) {
-      countQuery += ` AND department = $${countParamCount}`;
-      countParams.push(department);
-      countParamCount++;
-    }
-
-    if (status) {
-      countQuery += ` AND status = $${countParamCount}`;
-      countParams.push(status);
-      countParamCount++;
-    }
-
-    const countResult = await query(countQuery, countParams);
-    const total = parseInt(countResult.rows[0].count);
+    const countResult = await countQuery;
+    const total = countResult[0].count;
 
     res.json({
-      staff: result.rows,
+      staff: results,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -84,13 +69,17 @@ router.get('/', async (req, res) => {
 // Get staff by ID
 router.get('/:id', async (req, res) => {
   try {
-    const result = await query('SELECT * FROM staff WHERE id = $1', [req.params.id]);
+    const result = await db
+      .select()
+      .from(staff)
+      .where(eq(staff.id, parseInt(req.params.id)))
+      .limit(1);
 
-    if (result.rows.length === 0) {
+    if (result.length === 0) {
       return res.status(404).json({ error: 'Staff not found' });
     }
 
-    res.json(result.rows[0]);
+    res.json(result[0]);
   } catch (error) {
     logger.error('Error fetching staff', { error: error.message });
     res.status(500).json({ error: 'Internal server error' });
@@ -102,23 +91,31 @@ router.post('/', async (req, res) => {
   try {
     const {
       staff_id, first_name, last_name, gender, date_of_birth,
-      position, department, phone_number, email, rfid_uid,
+      position, department, phone, email, address,
       employment_type, date_joined, status
     } = req.body;
 
-    const result = await query(
-      `INSERT INTO staff (staff_id, first_name, last_name, gender, date_of_birth, 
-                         position, department, phone_number, email, rfid_uid,
-                         employment_type, date_joined, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-       RETURNING *`,
-      [staff_id, first_name, last_name, gender, date_of_birth,
-       position, department, phone_number, email, rfid_uid,
-       employment_type, date_joined, status || 'ACTIVE']
-    );
+    const result = await db
+      .insert(staff)
+      .values({
+        staffId: staff_id,
+        firstName: first_name,
+        lastName: last_name,
+        gender,
+        dateOfBirth: date_of_birth,
+        position,
+        department,
+        phone,
+        email,
+        address,
+        employmentType: employment_type,
+        dateJoined: date_joined,
+        status: status || 'ACTIVE'
+      })
+      .returning();
 
-    logger.info('Staff created', { staffId: result.rows[0].id });
-    res.status(201).json(result.rows[0]);
+    logger.info('Staff created', { staffId: result[0].id });
+    res.status(201).json(result[0]);
   } catch (error) {
     logger.error('Error creating staff', { error: error.message });
     res.status(500).json({ error: 'Internal server error' });
@@ -130,28 +127,35 @@ router.put('/:id', async (req, res) => {
   try {
     const {
       first_name, last_name, gender, date_of_birth,
-      position, department, phone_number, email, rfid_uid,
+      position, department, phone, email, address,
       employment_type, status
     } = req.body;
 
-    const result = await query(
-      `UPDATE staff 
-       SET first_name = $1, last_name = $2, gender = $3, date_of_birth = $4,
-           position = $5, department = $6, phone_number = $7, email = $8,
-           rfid_uid = $9, employment_type = $10, status = $11
-       WHERE id = $12
-       RETURNING *`,
-      [first_name, last_name, gender, date_of_birth,
-       position, department, phone_number, email, rfid_uid,
-       employment_type, status, req.params.id]
-    );
+    const result = await db
+      .update(staff)
+      .set({
+        firstName: first_name,
+        lastName: last_name,
+        gender,
+        dateOfBirth: date_of_birth,
+        position,
+        department,
+        phone,
+        email,
+        address,
+        employmentType: employment_type,
+        status,
+        updatedAt: new Date()
+      })
+      .where(eq(staff.id, parseInt(req.params.id)))
+      .returning();
 
-    if (result.rows.length === 0) {
+    if (result.length === 0) {
       return res.status(404).json({ error: 'Staff not found' });
     }
 
     logger.info('Staff updated', { staffId: req.params.id });
-    res.json(result.rows[0]);
+    res.json(result[0]);
   } catch (error) {
     logger.error('Error updating staff', { error: error.message });
     res.status(500).json({ error: 'Internal server error' });
@@ -161,12 +165,12 @@ router.put('/:id', async (req, res) => {
 // Delete staff
 router.delete('/:id', async (req, res) => {
   try {
-    const result = await query(
-      'DELETE FROM staff WHERE id = $1 RETURNING *',
-      [req.params.id]
-    );
+    const result = await db
+      .delete(staff)
+      .where(eq(staff.id, parseInt(req.params.id)))
+      .returning();
 
-    if (result.rows.length === 0) {
+    if (result.length === 0) {
       return res.status(404).json({ error: 'Staff not found' });
     }
 
@@ -178,4 +182,4 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

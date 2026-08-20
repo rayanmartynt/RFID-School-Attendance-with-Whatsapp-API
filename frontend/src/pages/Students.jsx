@@ -104,15 +104,19 @@ const Students = () => {
   }
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64">Loading...</div>
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Students</h1>
-          <p className="text-gray-500">Manage student records</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Students</h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Manage student records</p>
         </div>
         <div className="flex items-center gap-3">
           <input
@@ -147,7 +151,7 @@ const Students = () => {
       <div className="card">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500" size={20} />
             <input
               type="text"
               placeholder="Search students..."
@@ -199,23 +203,23 @@ const Students = () => {
             <tbody>
               {students.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="text-center py-8 text-gray-500">
+                  <td colSpan="8" className="text-center py-8 text-gray-500 dark:text-gray-400">
                     No students found
                   </td>
                 </tr>
               ) : (
                 students.map((student) => (
                   <tr key={student.id}>
-                    <td className="font-medium">{student.student_id}</td>
-                    <td>
+                    <td className="font-medium text-gray-900 dark:text-gray-100">{student.student_id}</td>
+                    <td className="text-gray-700 dark:text-gray-300">
                       {student.first_name} {student.last_name}
                     </td>
-                    <td>{student.grade} {student.section}</td>
-                    <td>
+                    <td className="text-gray-700 dark:text-gray-300">{student.grade} {student.section}</td>
+                    <td className="text-gray-700 dark:text-gray-300">
                       {student.parent_first_name} {student.parent_last_name}
                     </td>
-                    <td>{student.parent_phone}</td>
-                    <td className="font-mono text-sm">{student.rfid_uid || 'N/A'}</td>
+                    <td className="text-gray-700 dark:text-gray-300">{student.parent_phone}</td>
+                    <td className="font-mono text-sm text-gray-600 dark:text-gray-400">{student.rfid_uid || 'N/A'}</td>
                     <td>
                       <span className={`badge ${getStatusBadge(student.status)}`}>
                         {student.status}
@@ -225,13 +229,13 @@ const Students = () => {
                       <div className="flex items-center gap-2">
                         <Link
                           to={`/students/${student.id}/edit`}
-                          className="text-primary hover:text-primary-dark"
+                          className="text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors"
                         >
                           <Edit size={18} />
                         </Link>
                         <button
                           onClick={() => handleDelete(student.id)}
-                          className="text-danger hover:text-red-700"
+                          className="text-danger-600 dark:text-danger-400 hover:text-danger-700 dark:hover:text-danger-300 transition-colors"
                         >
                           <Trash2 size={18} />
                         </button>

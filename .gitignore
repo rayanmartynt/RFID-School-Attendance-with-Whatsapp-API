@@ -54,3 +54,6 @@ temp/
 # Backup files
 *.backup
 *.bak
+
+
+docs/

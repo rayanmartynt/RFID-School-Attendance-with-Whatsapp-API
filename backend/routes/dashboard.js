@@ -1,7 +1,9 @@
-const express = require('express');
-const { query } = require('../config/database');
-const { logger } = require('../utils/logger');
-const moment = require('moment');
+import express from 'express';
+import { db } from '../db/index.js';
+import { students, staff, attendance, staffAttendance, classes } from '../db/schema.js';
+import { eq, and, sql, desc } from 'drizzle-orm';
+import { logger } from '../utils/logger.js';
+import moment from 'moment';
 
 const router = express.Router();
 
@@ -11,58 +13,90 @@ router.get('/statistics', async (req, res) => {
     const today = moment().format('YYYY-MM-DD');
 
     // Student statistics
-    const totalStudentsResult = await query(
-      'SELECT COUNT(*) as count FROM students WHERE status = $1',
-      ['ACTIVE']
-    );
+    const totalStudentsResult = await db
+      .select({ count: sql`count(*)` })
+      .from(students)
+      .where(eq(students.status, 'ACTIVE'));
 
-    const presentStudentsResult = await query(
-      `SELECT COUNT(*) as count FROM attendance 
-       WHERE date = $1 AND status IN ($2, $3)`,
-      [today, 'PRESENT', 'LATE']
-    );
+    const presentStudentsResult = await db
+      .select({ count: sql`count(*)` })
+      .from(attendance)
+      .where(
+        and(
+          sql`DATE(${attendance.date}) = ${today}`,
+          sql`${attendance.status} IN ('PRESENT', 'LATE')`
+        )
+      );
 
-    const absentStudentsResult = await query(
-      `SELECT COUNT(*) as count FROM students s
-       WHERE s.status = $1
-       AND s.id NOT IN (SELECT student_id FROM attendance WHERE date = $2)`,
-      ['ACTIVE', today]
-    );
+    const attendedStudentIds = await db
+      .select({ studentId: attendance.studentId })
+      .from(attendance)
+      .where(sql`DATE(${attendance.date}) = ${today}`);
 
-    const lateStudentsResult = await query(
-      `SELECT COUNT(*) as count FROM attendance 
-       WHERE date = $1 AND is_late = $2`,
-      [today, true]
-    );
+    const attendedIds = attendedStudentIds.map(row => row.studentId);
+
+    const absentStudentsResult = await db
+      .select({ count: sql`count(*)` })
+      .from(students)
+      .where(
+        and(
+          eq(students.status, 'ACTIVE'),
+          sql`${students.id} NOT IN (${attendedIds.length > 0 ? attendedIds : [0]})`
+        )
+      );
+
+    const lateStudentsResult = await db
+      .select({ count: sql`count(*)` })
+      .from(attendance)
+      .where(
+        and(
+          sql`DATE(${attendance.date}) = ${today}`,
+          eq(attendance.isLate, true)
+        )
+      );
 
     // Staff statistics
-    const totalStaffResult = await query(
-      'SELECT COUNT(*) as count FROM staff WHERE status = $1',
-      ['ACTIVE']
-    );
+    const totalStaffResult = await db
+      .select({ count: sql`count(*)` })
+      .from(staff)
+      .where(eq(staff.status, 'ACTIVE'));
 
-    const presentStaffResult = await query(
-      `SELECT COUNT(*) as count FROM staff_attendance 
-       WHERE date = $1 AND status = $2`,
-      [today, 'PRESENT']
-    );
+    const presentStaffResult = await db
+      .select({ count: sql`count(*)` })
+      .from(staffAttendance)
+      .where(
+        and(
+          sql`DATE(${staffAttendance.date}) = ${today}`,
+          eq(staffAttendance.status, 'PRESENT')
+        )
+      );
 
-    const absentStaffResult = await query(
-      `SELECT COUNT(*) as count FROM staff s
-       WHERE s.status = $1
-       AND s.id NOT IN (SELECT staff_id FROM staff_attendance WHERE date = $2)`,
-      ['ACTIVE', today]
-    );
+    const attendedStaffIds = await db
+      .select({ staffId: staffAttendance.staffId })
+      .from(staffAttendance)
+      .where(sql`DATE(${staffAttendance.date}) = ${today}`);
+
+    const attendedStaffIdsList = attendedStaffIds.map(row => row.staffId);
+
+    const absentStaffResult = await db
+      .select({ count: sql`count(*)` })
+      .from(staff)
+      .where(
+        and(
+          eq(staff.status, 'ACTIVE'),
+          sql`${staff.id} NOT IN (${attendedStaffIdsList.length > 0 ? attendedStaffIdsList : [0]})`
+        )
+      );
 
     // Calculate attendance rates
-    const totalStudents = parseInt(totalStudentsResult.rows[0].count);
-    const presentStudents = parseInt(presentStudentsResult.rows[0].count);
+    const totalStudents = totalStudentsResult[0]?.count || 0;
+    const presentStudents = presentStudentsResult[0]?.count || 0;
     const studentAttendanceRate = totalStudents > 0 
       ? Math.round((presentStudents / totalStudents) * 100) 
       : 0;
 
-    const totalStaff = parseInt(totalStaffResult.rows[0].count);
-    const presentStaff = parseInt(presentStaffResult.rows[0].count);
+    const totalStaff = totalStaffResult[0]?.count || 0;
+    const presentStaff = presentStaffResult[0]?.count || 0;
     const staffAttendanceRate = totalStaff > 0 
       ? Math.round((presentStaff / totalStaff) * 100) 
       : 0;
@@ -71,13 +105,13 @@ router.get('/statistics', async (req, res) => {
       students: {
         total: totalStudents,
         present: presentStudents,
-        absent: parseInt(absentStudentsResult.rows[0].count),
-        late: parseInt(lateStudentsResult.rows[0].count)
+        absent: absentStudentsResult[0]?.count || 0,
+        late: lateStudentsResult[0]?.count || 0
       },
       staff: {
         total: totalStaff,
         present: presentStaff,
-        absent: parseInt(absentStaffResult.rows[0].count)
+        absent: absentStaffResult[0]?.count || 0
       },
       attendanceRate: {
         students: studentAttendanceRate,
@@ -97,49 +131,57 @@ router.get('/recent-activity', async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
 
     // Get recent student attendance
-    const studentActivity = await query(
-      `SELECT a.id, a.arrival_time, a.status, 
-              s.first_name, s.last_name, c.grade, c.section,
-              'STUDENT' as person_type
-       FROM attendance a
-       JOIN students s ON a.student_id = s.id
-       LEFT JOIN classes c ON s.class_id = c.id
-       WHERE a.date = CURRENT_DATE
-       ORDER BY a.created_at DESC
-       LIMIT $1`,
-      [limit]
-    );
+    const studentActivity = await db
+      .select({
+        id: attendance.id,
+        arrivalTime: attendance.arrivalTime,
+        status: attendance.status,
+        firstName: students.firstName,
+        lastName: students.lastName,
+        grade: classes.grade,
+        section: classes.section,
+        personType: sql`'STUDENT'`
+      })
+      .from(attendance)
+      .innerJoin(students, eq(attendance.studentId, students.id))
+      .leftJoin(classes, eq(students.classId, classes.id))
+      .where(sql`DATE(${attendance.date}) = CURRENT_DATE`)
+      .orderBy(desc(attendance.createdAt));
 
     // Get recent staff attendance
-    const staffActivity = await query(
-      `SELECT sa.id, sa.arrival_time, sa.status,
-              s.first_name, s.last_name, s.department, s.position,
-              'STAFF' as person_type
-       FROM staff_attendance sa
-       JOIN staff s ON sa.staff_id = s.id
-       WHERE sa.date = CURRENT_DATE
-       ORDER BY sa.created_at DESC
-       LIMIT $1`,
-      [limit]
-    );
+    const staffActivity = await db
+      .select({
+        id: staffAttendance.id,
+        arrivalTime: staffAttendance.arrivalTime,
+        status: staffAttendance.status,
+        firstName: staff.firstName,
+        lastName: staff.lastName,
+        department: staff.department,
+        position: staff.position,
+        personType: sql`'STAFF'`
+      })
+      .from(staffAttendance)
+      .innerJoin(staff, eq(staffAttendance.staffId, staff.id))
+      .where(sql`DATE(${staffAttendance.date}) = CURRENT_DATE`)
+      .orderBy(desc(staffAttendance.createdAt));
 
     // Combine and sort by time
     const allActivity = [
-      ...studentActivity.rows.map(a => ({
+      ...studentActivity.map(a => ({
         ...a,
         event: a.status === 'DEPARTED' ? 'DEPARTURE' : 'ARRIVAL',
         class: a.grade ? `${a.grade} ${a.section}` : null,
-        department: a.department,
-        position: a.position
+        department: null,
+        position: null
       })),
-      ...staffActivity.rows.map(a => ({
+      ...staffActivity.map(a => ({
         ...a,
         event: a.status === 'DEPARTED' ? 'DEPARTURE' : 'PRESENT',
         class: null,
         department: a.department,
         position: a.position
       }))
-    ].sort((a, b) => new Date(b.arrival_time) - new Date(a.arrival_time))
+    ].sort((a, b) => new Date(b.arrivalTime) - new Date(a.arrivalTime))
      .slice(0, limit);
 
     res.json({
@@ -156,26 +198,69 @@ router.get('/class-attendance', async (req, res) => {
   try {
     const today = moment().format('YYYY-MM-DD');
 
-    const result = await query(
-      `SELECT c.id, c.grade, c.section, c.capacity,
-              COUNT(s.id) as total_students,
-              COUNT(a.id) FILTER (WHERE a.status IN ('PRESENT', 'LATE')) as present,
-              COUNT(a.id) FILTER (WHERE a.status = 'LATE') as late,
-              COUNT(s.id) - COUNT(a.id) as absent
-       FROM classes c
-       LEFT JOIN students s ON c.id = s.class_id AND s.status = 'ACTIVE'
-       LEFT JOIN attendance a ON s.id = a.student_id AND a.date = $1
-       GROUP BY c.id, c.grade, c.section, c.capacity
-       ORDER BY c.grade, c.section`,
-      [today]
-    );
+    const result = await db
+      .select({
+        id: classes.id,
+        grade: classes.grade,
+        section: classes.section,
+        capacity: classes.capacity
+      })
+      .from(classes)
+      .orderBy(classes.grade, classes.section);
 
-    const classAttendance = result.rows.map(c => ({
-      ...c,
-      attendance_rate: c.total_students > 0 
-        ? ((c.present / c.total_students) * 100).toFixed(1)
-        : '0.0'
-    }));
+    const classAttendance = await Promise.all(
+      result.map(async (c) => {
+        const totalStudentsResult = await db
+          .select({ count: sql`count(*)` })
+          .from(students)
+          .where(
+            and(
+              eq(students.classId, c.id),
+              eq(students.status, 'ACTIVE')
+            )
+          );
+
+        const presentResult = await db
+          .select({ count: sql`count(*)` })
+          .from(attendance)
+          .innerJoin(students, eq(attendance.studentId, students.id))
+          .where(
+            and(
+              eq(students.classId, c.id),
+              sql`DATE(${attendance.date}) = ${today}`,
+              sql`${attendance.status} IN ('PRESENT', 'LATE')`
+            )
+          );
+
+        const lateResult = await db
+          .select({ count: sql`count(*)` })
+          .from(attendance)
+          .innerJoin(students, eq(attendance.studentId, students.id))
+          .where(
+            and(
+              eq(students.classId, c.id),
+              sql`DATE(${attendance.date}) = ${today}`,
+              eq(attendance.isLate, true)
+            )
+          );
+
+        const totalStudents = totalStudentsResult[0].count;
+        const present = presentResult[0].count;
+        const late = lateResult[0].count;
+        const absent = totalStudents - present;
+
+        return {
+          ...c,
+          total_students: totalStudents,
+          present,
+          late,
+          absent,
+          attendance_rate: totalStudents > 0 
+            ? ((present / totalStudents) * 100).toFixed(1)
+            : '0.0'
+        };
+      })
+    );
 
     res.json({
       date: today,
@@ -187,4 +272,4 @@ router.get('/class-attendance', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

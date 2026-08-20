@@ -40,20 +40,24 @@ const StaffAttendance = () => {
   }
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64">Loading...</div>
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-800">Staff Attendance</h1>
-        <p className="text-gray-500">View and manage staff attendance records</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Staff Attendance</h1>
+        <p className="text-gray-500 dark:text-gray-400 mt-1">View and manage staff attendance records</p>
       </div>
 
       <div className="card">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="relative">
-            <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+            <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500" size={20} />
             <input
               type="date"
               value={date}
@@ -102,21 +106,21 @@ const StaffAttendance = () => {
             <tbody>
               {attendance.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="text-center py-8 text-gray-500">
+                  <td colSpan="7" className="text-center py-8 text-gray-500 dark:text-gray-400">
                     No attendance records found
                   </td>
                 </tr>
               ) : (
                 attendance.map((record) => (
                   <tr key={record.id}>
-                    <td className="font-medium">{record.staff_id}</td>
-                    <td>
+                    <td className="font-medium text-gray-900 dark:text-gray-100">{record.staff_id}</td>
+                    <td className="text-gray-700 dark:text-gray-300">
                       {record.first_name} {record.last_name}
                     </td>
-                    <td>{record.department}</td>
-                    <td>{record.position}</td>
-                    <td>{record.arrival_time || 'N/A'}</td>
-                    <td>{record.departure_time || 'N/A'}</td>
+                    <td className="text-gray-700 dark:text-gray-300">{record.department}</td>
+                    <td className="text-gray-700 dark:text-gray-300">{record.position}</td>
+                    <td className="text-gray-700 dark:text-gray-300">{record.arrival_time || 'N/A'}</td>
+                    <td className="text-gray-700 dark:text-gray-300">{record.departure_time || 'N/A'}</td>
                     <td>
                       <span className={`badge ${getStatusBadge(record.status)}`}>
                         {record.status}

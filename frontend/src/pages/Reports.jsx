@@ -75,14 +75,14 @@ const Reports = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-800">Attendance Reports</h1>
-        <p className="text-gray-500">Generate and export attendance reports</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Attendance Reports</h1>
+        <p className="text-gray-500 dark:text-gray-400 mt-1">Generate and export attendance reports</p>
       </div>
 
       <div className="card">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Report Type
             </label>
             <select
@@ -97,11 +97,11 @@ const Reports = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Date
             </label>
             <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+              <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500" size={20} />
               <input
                 type="date"
                 value={date}
@@ -125,34 +125,36 @@ const Reports = () => {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center h-64">Loading report...</div>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        </div>
       ) : reportData ? (
         <div className="space-y-6">
           {reportData.summary && (
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="card">
-                <p className="text-sm text-gray-500 mb-1">Total Students</p>
-                <p className="text-3xl font-bold">{reportData.summary.students.total}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Students</p>
+                <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">{reportData.summary.students.total}</p>
               </div>
               <div className="card">
-                <p className="text-sm text-gray-500 mb-1">Present</p>
-                <p className="text-3xl font-bold text-success">{reportData.summary.students.present}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Present</p>
+                <p className="text-3xl font-bold text-success-600 dark:text-success-400">{reportData.summary.students.present}</p>
               </div>
               <div className="card">
-                <p className="text-sm text-gray-500 mb-1">Absent</p>
-                <p className="text-3xl font-bold text-danger">{reportData.summary.students.absent}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Absent</p>
+                <p className="text-3xl font-bold text-danger-600 dark:text-danger-400">{reportData.summary.students.absent}</p>
               </div>
               <div className="card">
-                <p className="text-sm text-gray-500 mb-1">Attendance Rate</p>
-                <p className="text-3xl font-bold text-primary">{reportData.summary.students.attendanceRate}%</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Attendance Rate</p>
+                <p className="text-3xl font-bold text-primary-600 dark:text-primary-400">{reportData.summary.students.attendanceRate}%</p>
               </div>
             </div>
           )}
 
           <div className="card">
             <div className="flex items-center gap-2 mb-4">
-              <FileText className="text-primary" size={20} />
-              <h3 className="text-lg font-semibold">Student Attendance Details</h3>
+              <FileText className="text-primary-600 dark:text-primary-400" size={20} />
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Student Attendance Details</h3>
             </div>
             <div className="table-container">
               <table className="data-table">
@@ -171,18 +173,18 @@ const Reports = () => {
                   {reportData.studentAttendance && reportData.studentAttendance.length > 0 ? (
                     reportData.studentAttendance.map((record, index) => (
                       <tr key={index}>
-                        <td className="font-medium">{record.student_id}</td>
-                        <td>{record.first_name} {record.last_name}</td>
-                        <td>{record.grade} {record.section}</td>
-                        <td>{record.arrival_time || 'N/A'}</td>
-                        <td>{record.departure_time || 'N/A'}</td>
-                        <td>{record.status || 'N/A'}</td>
-                        <td>{record.is_late ? 'Yes' : 'No'}</td>
+                        <td className="font-medium text-gray-900 dark:text-gray-100">{record.student_id}</td>
+                        <td className="text-gray-700 dark:text-gray-300">{record.first_name} {record.last_name}</td>
+                        <td className="text-gray-700 dark:text-gray-300">{record.grade} {record.section}</td>
+                        <td className="text-gray-700 dark:text-gray-300">{record.arrival_time || 'N/A'}</td>
+                        <td className="text-gray-700 dark:text-gray-300">{record.departure_time || 'N/A'}</td>
+                        <td className="text-gray-700 dark:text-gray-300">{record.status || 'N/A'}</td>
+                        <td className="text-gray-700 dark:text-gray-300">{record.is_late ? 'Yes' : 'No'}</td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="7" className="text-center py-8 text-gray-500">
+                      <td colSpan="7" className="text-center py-8 text-gray-500 dark:text-gray-400">
                         No data available
                       </td>
                     </tr>
@@ -193,7 +195,7 @@ const Reports = () => {
           </div>
         </div>
       ) : (
-        <div className="card text-center py-8 text-gray-500">
+        <div className="card text-center py-8 text-gray-500 dark:text-gray-400">
           No report data available
         </div>
       )}
