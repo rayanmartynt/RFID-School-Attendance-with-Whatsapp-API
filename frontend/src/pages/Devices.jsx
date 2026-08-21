@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Edit, Wifi, WifiOff } from 'lucide-react'
+import { Plus, Edit, Wifi, WifiOff, Trash2 } from 'lucide-react'
 import api from '../services/api'
 
 const Devices = () => {
@@ -22,13 +22,35 @@ const Devices = () => {
     }
   }
 
-  const handleStatusToggle = async (deviceId, currentStatus) => {
+  const handleStatusToggle = async (device, currentStatus) => {
+    const deviceId = device.device_id || device.deviceId || device.id
+    if (!deviceId) {
+      console.error('Device ID is undefined:', device)
+      return
+    }
     const newStatus = currentStatus === 'ONLINE' ? 'OFFLINE' : 'ONLINE'
     try {
       await api.put(`/devices/${deviceId}/status`, { status: newStatus })
       fetchDevices()
     } catch (error) {
       console.error('Error updating device status:', error)
+    }
+  }
+
+  const handleDelete = async (device) => {
+    const deviceId = device.device_id || device.deviceId || device.id
+    if (!deviceId) {
+      console.error('Device ID is undefined:', device)
+      return
+    }
+    if (!window.confirm('Are you sure you want to delete this device?')) {
+      return
+    }
+    try {
+      await api.delete(`/devices/${deviceId}`)
+      fetchDevices()
+    } catch (error) {
+      console.error('Error deleting device:', error)
     }
   }
 
@@ -111,10 +133,16 @@ const Devices = () => {
                           <Edit size={18} />
                         </Link>
                         <button
-                          onClick={() => handleStatusToggle(device.device_id, device.status)}
+                          onClick={() => handleStatusToggle(device, device.status)}
                           className={device.status === 'ONLINE' ? 'text-danger-600 dark:text-danger-400 hover:text-danger-700 dark:hover:text-danger-300 transition-colors' : 'text-success-600 dark:text-success-400 hover:text-success-700 dark:hover:text-success-300 transition-colors'}
                         >
                           {device.status === 'ONLINE' ? <WifiOff size={18} /> : <Wifi size={18} />}
+                        </button>
+                        <button
+                          onClick={() => handleDelete(device)}
+                          className="text-danger-600 dark:text-danger-400 hover:text-danger-700 dark:hover:text-danger-300 transition-colors"
+                        >
+                          <Trash2 size={18} />
                         </button>
                       </div>
                     </td>

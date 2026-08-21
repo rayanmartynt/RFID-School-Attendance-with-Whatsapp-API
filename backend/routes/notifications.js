@@ -126,7 +126,7 @@ router.get('/statistics', async (req, res) => {
       .from(notificationHistory)
       .where(
         and(
-          sql`DATE(${notificationHistory.sentAt}) = ${today}`,
+          sql`DATE(${notificationHistory.sentAt}) = ${sql.raw(`'${today}'`)}`,
           eq(notificationHistory.status, 'SENT')
         )
       );
@@ -136,7 +136,7 @@ router.get('/statistics', async (req, res) => {
       .from(notificationHistory)
       .where(
         and(
-          sql`DATE(${notificationHistory.sentAt}) = ${today}`,
+          sql`DATE(${notificationHistory.sentAt}) = ${sql.raw(`'${today}'`)}`,
           eq(notificationHistory.status, 'FAILED')
         )
       );
@@ -147,7 +147,7 @@ router.get('/statistics', async (req, res) => {
         count: sql`count(*)`
       })
       .from(notificationHistory)
-      .where(sql`DATE(${notificationHistory.sentAt}) = ${today}`)
+      .where(sql`DATE(${notificationHistory.sentAt}) = ${sql.raw(`'${today}'`)}`)
       .groupBy(notificationHistory.notificationType);
 
     res.json({

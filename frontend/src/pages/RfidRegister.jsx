@@ -191,7 +191,7 @@ const RfidRegister = () => {
               >
                 <option value="">Select Device</option>
                 {devices.map((device) => (
-                  <option key={device.device_id} value={device.device_id}>
+                  <option key={device.id} value={device.device_id}>
                     {device.device_id} - {device.device_name}
                   </option>
                 ))}

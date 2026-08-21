@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Plus, Search, Filter, Edit, Trash2, Upload, Download } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import api from '../services/api'
+import { toast } from 'react-toastify'
 
 const Students = () => {
   const [students, setStudents] = useState([])
@@ -87,9 +88,9 @@ const Students = () => {
         const jsonData = XLSX.utils.sheet_to_json(worksheet)
 
         const response = await api.post('/excel/import/students', { data: jsonData })
-        
+
         if (response.data.success) {
-          alert(`Imported ${response.data.imported} students successfully`)
+          toast.success(`Imported ${response.data.imported} students successfully`)
           if (response.data.errors && response.data.errors.length > 0) {
             console.warn('Import errors:', response.data.errors)
           }
@@ -97,7 +98,7 @@ const Students = () => {
         }
       } catch (error) {
         console.error('Error importing students:', error)
-        alert('Failed to import students')
+        toast.error('Failed to import students')
       }
     }
     reader.readAsArrayBuffer(file)

@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import api from '../services/api'
 
 const DeviceForm = () => {
   const navigate = useNavigate()
+  const location = useLocation()
   const { id } = useParams()
-  const isEdit = !!id
+  const isEdit = location.pathname.includes('/edit') && id
 
   const [formData, setFormData] = useState({
     device_id: '',
@@ -20,14 +21,17 @@ const DeviceForm = () => {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    if (isEdit) {
+    const deviceId = parseInt(id)
+    if (isEdit && deviceId && !isNaN(deviceId)) {
       fetchDevice()
     }
   }, [id])
 
   const fetchDevice = async () => {
     try {
-      const response = await api.get(`/devices/${id}`)
+      const deviceId = parseInt(id)
+      if (!deviceId || isNaN(deviceId)) return
+      const response = await api.get(`/devices/${deviceId}`)
       setFormData(response.data)
     } catch (error) {
       console.error('Error fetching device:', error)

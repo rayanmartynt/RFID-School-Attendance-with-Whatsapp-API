@@ -30,7 +30,7 @@ router.get('/daily/:date', async (req, res) => {
       .from(students)
       .leftJoin(classes, eq(students.classId, classes.id))
       .leftJoin(parents, eq(students.parentId, parents.id))
-      .leftJoin(attendance, and(eq(students.id, attendance.studentId), sql`DATE(${attendance.date}) = ${date}`))
+      .leftJoin(attendance, and(eq(students.id, attendance.studentId), sql`DATE(${attendance.date}) = ${sql.raw(`'${date}'`)}`))
       .where(eq(students.status, 'ACTIVE'))
       .orderBy(classes.grade, classes.section, students.lastName, students.firstName);
 
@@ -46,7 +46,7 @@ router.get('/daily/:date', async (req, res) => {
         status: staffAttendance.status
       })
       .from(staff)
-      .leftJoin(staffAttendance, and(eq(staff.id, staffAttendance.staffId), sql`DATE(${staffAttendance.date}) = ${date}`))
+      .leftJoin(staffAttendance, and(eq(staff.id, staffAttendance.staffId), sql`DATE(${staffAttendance.date}) = ${sql.raw(`'${date}'`)}`))
       .where(eq(staff.status, 'ACTIVE'))
       .orderBy(staff.department, staff.lastName, staff.firstName);
 
@@ -182,7 +182,7 @@ router.get('/class/:classId/:date', async (req, res) => {
         parentPhone: parents.phone
       })
       .from(students)
-      .leftJoin(attendance, and(eq(students.id, attendance.studentId), sql`DATE(${attendance.date}) = ${date}`))
+      .leftJoin(attendance, and(eq(students.id, attendance.studentId), sql`DATE(${attendance.date}) = ${sql.raw(`'${date}'`)}`))
       .leftJoin(parents, eq(students.parentId, parents.id))
       .where(and(eq(students.classId, parseInt(classId)), eq(students.status, 'ACTIVE')))
       .orderBy(students.lastName, students.firstName);
@@ -231,7 +231,7 @@ router.get('/student/:studentId', async (req, res) => {
       .where(
         and(
           eq(attendance.studentId, parseInt(req.params.studentId)),
-          sql`DATE(${attendance.date}) BETWEEN ${queryStartDate} AND ${queryEndDate}`
+          sql`DATE(${attendance.date}) BETWEEN ${sql.raw(`'${queryStartDate}'`)} AND ${sql.raw(`'${queryEndDate}'`)}`
         )
       )
       .orderBy(desc(attendance.date));

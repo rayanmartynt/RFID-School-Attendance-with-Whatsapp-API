@@ -3,7 +3,7 @@
 #include <MFRC522.h>
 #include <LiquidCrystal.h>
 
-// ------------------- PIN DEFINITIONS -------------------
+// PIN DEFINITIONS
 #define SS_PIN    10
 #define RST_PIN   9
 #define GREEN_LED 5
@@ -16,13 +16,13 @@
 #define LCD_D6    A1
 #define LCD_D7    A2
 
-
+// VARIABLES
 const char* ssid       = "R._.t1ny";
 const char* password   = "102030401";
 const char* serverHost = "172.20.10.3";       // Your computer's local IP
 const int serverPort   = 5000;                // or 80 for plain HTTP
 const char* apiPath    = "/api/v1/rfid/scan";
-const char* apiKey     = "device_2618birm9v";
+const char* apiKey     = "device_xpzw99qvvrl";
 
 MFRC522 rfid(SS_PIN, RST_PIN);
 LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
